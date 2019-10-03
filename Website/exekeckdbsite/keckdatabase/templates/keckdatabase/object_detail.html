@@ -1,0 +1,19 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+  <h1>{{ object.name }}</h1>
+  <p>RA: {{object.ra}}</p>
+  <p>DEC: {{object.dec}}</p>
+  <p>Champion: {{object.champion}}</p>
+  <p>Instrument: {{measurement.mtype}}</p>
+  <p>Distance: {{measurement.distance}} pc</p>
+  <p>Gaia DR2 Distance: {{measurement.gaiadistance}} pc</p>
+  <p>Spectral Type: {{measurement.sptype}}</p>
+  <p>Proper Motion: {{measurement.propermotion}} mas/yr</p>
+  <p>V Magnitude: {{measurement.vmag}}</p>
+  <p>(B - V): {{measurement.bminusv}}</p>
+  <p>Needs Followup?: {{observation.followup}}</p>
+  <p>Number of Candidates: {{observation.candidates}}</p>
+  <p>Comment: {{observation.comment}}</p>
+  <p>Reduction Notes: {{observation.reductionnotes}}</p>
+{% endblock %}
