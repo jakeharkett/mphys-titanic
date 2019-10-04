@@ -1,19 +1,45 @@
 {% extends "base_generic.html" %}
 
 {% block content %}
-  <h1>{{ object.name }}</h1>
-  <p>RA: {{object.ra}}</p>
-  <p>DEC: {{object.dec}}</p>
-  <p>Champion: {{object.champion}}</p>
-  <p>Instrument: {{measurement.mtype}}</p>
-  <p>Distance: {{measurement.distance}} pc</p>
-  <p>Gaia DR2 Distance: {{measurement.gaiadistance}} pc</p>
-  <p>Spectral Type: {{measurement.sptype}}</p>
-  <p>Proper Motion: {{measurement.propermotion}} mas/yr</p>
-  <p>V Magnitude: {{measurement.vmag}}</p>
-  <p>(B - V): {{measurement.bminusv}}</p>
-  <p>Needs Followup?: {{observation.followup}}</p>
-  <p>Number of Candidates: {{observation.candidates}}</p>
-  <p>Comment: {{observation.comment}}</p>
-  <p>Reduction Notes: {{observation.reductionnotes}}</p>
+
+<h1 align="center">{{object.name}}</h1>
+
+<table class="table table-bordered" style="margin-top: 50px; margin-bottom: 50px;">
+    <thead>
+      <tr align="center">
+        <th scope="col">RA</th>
+        <th scope="col">Dec</th>
+        <th scope="col">Instrument</th>
+        <th scope="col">Distance</th>
+        <th scope="col">Gaia DR2 Distance</th>
+        <th scope="col">Spectral Type</th>
+        <th scope="col">Proper Motion</th>
+        <th scope="col">V Magnitude</th>
+        <th scope="col">(B - V)</th>
+      </tr>
+    </thead>
+
+    <tbody>
+        <tr align="center">
+          <td>{{ object.ra }}</td>
+          <td>{{ object.dec }}</td>
+          <td>{{measurement.mtype}}</td>
+          <td>{{measurement.distance}} pc</td>
+          <td>{{measurement.gaiadistance}} pc</td>
+          <td>{{measurement.sptype}}</td>
+          <td>{{measurement.propermotion}} mas/yr</td>
+          <td>{{measurement.vmag}}</td>
+          <td>{{measurement.bminusv}}</td>
+        </tr>
+    </tbody>
+  </table>
+
+    <h1 align="center">Analysis Notes</h1>
+    <hr>
+
+    <p>Champion: {{ object.champion }}</p>
+    <p>Needs Followup?: {{observation.followup}}</p>
+    <p>Number of Candidates: {{observation.candidates}}</p>
+    <p>Comment: {{observation.comment}}</p>
+    <p>Reduction Notes: {{observation.reductionnotes}}</p>
 {% endblock %}

@@ -3,7 +3,7 @@ from django.urls import reverse
 
 
 class Measurements(models.Model):
-    mid = models.IntegerField(primary_key=True, blank=False)
+    mid = models.IntegerField(primary_key=True, blank=True)
     mtype = models.TextField(blank=True, null=True)
     distance = models.DecimalField(blank=True, null=True, max_digits=5, decimal_places=1)  # This field type is a guess.
     gaiadistance = models.DecimalField(blank=True, null=True, max_digits=20, decimal_places=2)  # This field type is a guess.

@@ -15,6 +15,13 @@ def index(request):
 class ObjectListView(generic.ListView):
     model = Object
 
+    def get_context_data(self, **kwargs):
+        context = super(ObjectListView, self).get_context_data(**kwargs)
+        context['measurement'] = Measurements.objects.all()
+        context['observation'] = Observations.objects.all()
+
+        return context
+
 class ObjectDetailView(generic.DetailView):
     model = Object
     context_object_name = "object-detail"

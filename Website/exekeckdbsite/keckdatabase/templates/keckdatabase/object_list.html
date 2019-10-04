@@ -1,16 +1,31 @@
 {% extends "base_generic.html" %}
-
 {% block content %}
-  <h1>Object List</h1>
+  <h1 align="center">Object List</h1>
   {% if object_list %}
-  <ul>
-    {% for object in object_list %}
-      <li>
-        <a href="{{ object.get_absolute_url }}">{{ object.name }}</a>
-      </li>
-    {% endfor %}
-  </ul>
-  {% else %}
-    <p>There are no objects in the database.</p>
-  {% endif %}       
-{% endblock %}
+
+  <table class="table table-bordered table-hover">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">RA</th>
+          <th scope="col">Dec</th>
+          <th scope="col">Champion</th>
+        </tr>
+      </thead>
+
+      <tbody>
+
+        {% for object in object_list %}
+          <tr>
+            <th scope="row"><a href="{{ object.get_absolute_url }}">{{ object.name }}</a></th>
+            <td>{{ object.ra }}</td>
+            <td>{{ object.dec }}</td>
+            <td>{{ object.champion }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      {% else %}
+      <p>There are no objects in the database.</p>
+    {% endif %}       
+  {% endblock %}
+    </table>
