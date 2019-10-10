@@ -99,6 +99,10 @@ Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when runnin
 	2. Porting to VIP 0.9.11
 		Function vip.pca.pca_optimize_snr() doesn't work anymore.
 		
+07/10/19
+	Conflict of names: HIP_number and HIPnumber
+	Created new function to fit 2d gaussian
+		
 		
 		
 		
@@ -130,7 +134,7 @@ STUCTURE
 import matplotlib.pyplot as plt
 import numpy as np
 import vip_hci as vip
-from vip_hci.preproc import cube_recenter_2dfit, cube_recenter_dft_upsampling, cosmetics, badpixremoval
+from vip_hci.preproc import cube_recenter_2dfit, cube_recenter_dft_upsampling, cosmetics, badpixremoval, recentering
 from vip_hci.negfc import firstguess
 from vip_hci.negfc import cube_planet_free
 from vip_hci.negfc import show_corner_plot, show_walk_plot
@@ -486,10 +490,14 @@ Note: This function is terribly inefficient, could be much
 better looped over but haven't had the time to do so.
 """
 def Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sigma,name_input):
+	#Saves the PCA,ADI and LLSG curve outputs and reads them back in. 
+	np.savetxt('new_PCA_{star_name}_curve_outputs'.format(star_name=name_input),PCA_contrast_curve)
+	np.savetxt('new_LLSG_{star_name}_curve_outputs'.format(star_name=name_input),LLSG_contrast_curve)
+	
 
 	#Saves the PCA,ADI and LLSG curve outputs and reads them back in. 
-	PCA_data = np.loadtxt('new_PCA_{star_name}_curve_outputs'.format(star_name=name_input))
-	LLSG_data = np.loadtxt('new_LLSG_{star_name}_curve_outputs'.format(star_name=name_input))
+	#PCA_data = np.loadtxt('new_PCA_{star_name}_curve_outputs'.format(star_name=name_input))
+	#LLSG_data = np.loadtxt('new_LLSG_{star_name}_curve_outputs'.format(star_name=name_input))
 	
 	#Initialises the PCA variables (500 being the size).
 	PCA_Distance = np.zeros(500)
@@ -672,6 +680,64 @@ def cart2pol (x,y,flux):
 	f_p = flux
 
 	return rho,phi,f_p
+	
+	
+
+
+
+"""
+Function takes the cube and the PSF (plus its centre)
+and fits a 2d Gaussian into it.
+Using that, it recenters the cube and plots the result.
+Returns the re-centered cube, and the x/y shifts
+"""
+
+def Gaussian_2d_Fit( psf, cube_orig, centre):
+
+	gauss = vip.var.fit_2dgaussian(
+		psf, crop=True, cropsize=30, cent=(psf_xy[0], psf_xy[1]),
+		full_output=True, debug=True
+		)
+	#Calculates the FWHM from the VIP gaussian function.
+	
+	print( gauss )
+	
+	# 'gauss' is a pandas dataframe
+	# Columns are: 
+	#	0-centroid_y		1-centroid_x	2-fwhm_y	3-fwhm_x	4-amplitude		5-theta
+	# Hence take columns 2 and 3 for FWHM y and x components
+	fwhm_x = gauss.iloc[0,3]
+	fwhm_y = gauss.iloc[0,2]
+	
+	
+	fwhm = np.mean([fwhm_x, fwhm_y])
+	print( "FWHM = ", fwhm )
+
+	fwhm_int = math.ceil(fwhm)
+	fwhm_int = int(fwhm_int)
+	print( "Round up = ", fwhm_int )
+	
+	#Shy1 = Shift in y, shx1 = shift in x. Calculates the shifts needed to centre the image.
+	#Negative = True (Bright spot at the centre) Negative = False (No bright spot at centre).
+
+	cube1, shy1, shx1 = cube_recenter_2dfit(
+		cube_orig, (centre[0], centre[1]), fwhm,
+		model='gauss', nproc = 1, subi_size = fwhm_int, 
+		negative=False, full_output=True, debug=False
+		)
+		
+	#Plots the shifts in x and y used to centre the images.
+	plt.figure(figsize = (8,3))								
+	plt.plot(shy1, 'o-', label='shifts in y', alpha=0.5)	
+	plt.plot(shx1, 'o-', label='shifts in x', alpha=0.5)
+	plt.legend(loc = 'best')
+	plt.grid('on')
+	plt.suptitle('Positive 2d Gaussian fit')
+	plt.show()
+	
+	return cube1, shy1, shx1, fwhm
+	
+
 		
 """ 
 End of defining functions 
@@ -689,28 +755,29 @@ End of defining functions
 
 print("\n\n\n ================= Project Script =================")
 print("\n Version 11_py3 \n\n")
-	
 
+
+
+	
+"""
+------ 1 - GET STAR NAME
+"""
+	
 name_input = input('Name of the star (example = HIP_544):  ')
 Centring_loop = 0 # Initialise loop to allow for re centring
 
 while Centring_loop == 0:
 	
-	
-	"""
-	------ 1 - GET STAR NAME
-	"""
 	#Loads the filenames into python and counts the number of files.
 	file_names = ReadImageFilenames(name_input)
 	Number_images = len(file_names)
-
-	build_check = 0
-		#Initialises the variable which is used to build the cube (or not).
 	
 	
 	"""
 	------ 2 - CREATE DATA CUBE
 	"""
+	build_check = 0
+	#Initialises the variable which is used to build the cube (or not).
 	print( "Would you like to create the data cube?")
 	build_check = Checkfunction()
 
@@ -753,53 +820,64 @@ while Centring_loop == 0:
 
 
 	Loop_counttwo = 1
-	# Need to re set star_xy so it asks for coordinates again 
+	# Need to re-set star_xy so it asks for coordinates again 
 	# and need to stop it asking to center loop again and go straight to getting coordinates and exiting!
 	
 	Loop_countthree = 0
+	#auto_find_coords = 0
 	# Needed to make sure loop does not allow you to keep running loop over centre coordinates
 
 	while Loop_counttwo > 0:
-		star_xy = [0.1,0.1]
+	
+		star_xy = [0.1, 0.1]
 		
 		print("Using DS9, open any image in Newcube.fits")
-		star_xy[0] = input("Input the x co-ordinate of the centre position of the star (integer number): ")
+		star_xy[0] = input("Input the x co-ordinate of the central position of the star (integer number): ")
 		star_xy[0] = int(star_xy[0])
 		
-		star_xy[1]=input("Input the x co-ordinate of the centre position of the star (integer number): ")
+		star_xy[1]=input("Input the x co-ordinate of the central position of the star (integer number): ")
 		star_xy[1] = int(star_xy[1])
 		
 		
 		#Opens the cube (using VIP) with cube_orig as HDU:0 and calls it cube_orig, 
-		#and the parallactic angles as HDU:1, HDU:1 being the previously appended part. 
+		#and the parallactic angles from a text file.
 		#Uses VIP to also open the point spread function previously loaded in.
 		
-		#cube_orig, angs = open_adicube(cube)
 		cube_orig = vip.fits.open_fits(cube)
-		angs = np.loadtxt('{name}_angles.txt'.format(name=name_input))
+		angs = np.loadtxt( '{name}_angles.txt'.format(name = name_input) )
 		psf = vip.fits.open_fits(initialpsf, n=0, header=False, ignore_missing_end=True, verbose=True)
 	
-		print( "Fitting a 2D gaussian to centre the images" )
-
+		print( "Fitting a 2D gaussian to centre the images..." )
+		cube1, shy1, shx1, fwhm = Gaussian_2d_Fit( psf, cube_orig, star_xy)
+		
 		#Uses VIP's 2D gaussian fitting algorithm to centre the cube.
-
+		
+		
 
 		# Created a loop to get over the annoying problem of choosing a perfect centre
 		# Will look through various centres and decides if it's a good fit or not.
 		# Maybe use its own function??
 		
+		"""
+		Loop through new coordinates ========================================================================
+		"""
+		
+		
+		
 		if Loop_countthree == 0:  #only allows the loop over centre coordinates on first iteration of control loop
+			
 			print( "If you are having difficulty finding the best centre point," )
 			print( "then you can loop through a few co-ordinates close to the original value" )
 			print( "to find a better centre" )
 			check_gauss = 0
 			print( "Would you like to loop over a region close to the centre value?" )
 			check_gauss = Checkfunction()
-		
+			
+			# If you want to loop with sightly different coordinates:
 			if check_gauss == 0:
 				Loop_centre = [0,0]
-				Loop_centre[0] = star_xy[0] -2
-				Loop_centre[1] = star_xy[1] -2
+				Loop_centre[0] = star_xy[0] - 2
+				Loop_centre[1] = star_xy[1] - 2
 				Loop_break=1 # allows for the loop to be broken to save time if correct values found quickly
 				print( "New center x =",Loop_centre[0] )
 				print( "New center y =",Loop_centre[1] )
@@ -808,35 +886,8 @@ while Centring_loop == 0:
 					for Loop_centre[1] in range(star_xy[1]-2, star_xy[1] +2):
 		
 						print( "Using the value [{:f},{:f}] as the centre".format(Loop_centre[0], Loop_centre[1]) )
-						gauss = vip.var.fit_2dgaussian(
-							psf, crop=True, cropsize=30, cent=(psf_xy[0], psf_xy[1]),
-							full_output=True, debug=True
-							)
-
-						print( gauss )
-						fwhm_x = gauss.iloc[0,3]
-						fwhm_y = gauss.iloc[0,2]
-						fwhm = np.mean([fwhm_x, fwhm_y])
-						print( "FWHM = ", fwhm )
-
-						fwhm_int = math.ceil(fwhm)
-						fwhm_int = int(fwhm_int)
-						print( "Round up = ", fwhm_int )
-
-						cube1, shy1, shx1 = cube_recenter_2dfit(
-							cube_orig, (Loop_centre[0], Loop_centre[1]), fwhm,
-							model='gauss', nproc = 1, subi_size=fwhm_int, 
-							negative=True, full_output=True, debug=False
-							)
-		
-						#Plots the shifts in x and y used to centre the images.
-						plt.figure(figsize = (8,3))								
-						plt.plot(shy1, 'o-', label='shifts in y', alpha=0.5)	
-						plt.plot(shx1, 'o-', label='shifts in x', alpha=0.5)
-						plt.legend(loc = 'best')
-						plt.grid('on')
-						plt.suptitle('Positive 2d Gaussian fit')
-						plt.show() 
+						
+						cube1, shy1, shx1, fwhm = Gaussian_2d_Fit( psf, cube_orig, Loop_centre)
 		
 						sumshy1 = 0
 						sumshx1 = 0
@@ -875,55 +926,20 @@ while Centring_loop == 0:
 						break
 						
 			Loop_counttwo = Loop_counttwo + 1
-	
-
+		"""
+		End of coord loop ========================================================================
+		"""
+		
+		"""
+		# If 
 		if check_gauss == 1:
-			gauss = vip.var.fit_2dgaussian(
-				psf, crop=True, cropsize=30, cent=(psf_xy[0], psf_xy[1]),
-				full_output=True, debug=False
-				)
-			
-			#Calculates the fwhm from the VIP gaussian function.
-			print( gauss )
-			
-			# 'gauss' is a pandas dataframe
-			# Columns are: 
-			#	0-centroid_y		1-centroid_x	2-fwhm_y	3-fwhm_x	4-amplitude		5-theta
-			# Hence take columns 2 and 3 for FWHM y and x components
-			
-			fwhm_x = gauss.iloc[0,3]
-			fwhm_y = gauss.iloc[0,2]
-			
-			fwhm = np.mean([fwhm_x, fwhm_y])
-			
-			print( "fwhm =",fwhm )
-
-			fwhm_int = math.ceil(fwhm)
-			fwhm_int = int(fwhm_int)
-			print( "round up =", fwhm_int )
-	
-			#Shy1 = Shift in y, shx1 = shift in x. Calculates the shifts needed to centre the image.
-			#Negative = True (Bright spot at the centre) Negative = False (No bright spot at centre).
-			
-			cube1, shy1, shx1 = cube_recenter_2dfit(
-				cube_orig, (star_xy[0], star_xy[1]), fwhm,
-				model='gauss',nproc=1, subi_size=fwhm_int, 
-				negative=False,full_output=True, debug=False
-				)
-
-			#Plots the shifts in x and y used to centre the images.
-			plt.figure(figsize=(8,3))								
-			plt.plot(shy1, 'o-', label='shifts in y', alpha=0.5)	
-			plt.plot(shx1, 'o-', label='shifts in x', alpha=0.5)
-			plt.legend(loc='best')
-			plt.grid('on')
-			plt.suptitle('Positive 2d Gaussian fit')
-			plt.show()
+			cube1, shy1, shx1, fwhm = Gaussian_2d_Fit( psf, cube_orig, star_xy)
 			Loop_counttwo = 0
-				
+		"""
 		
 		Loop_counttwo = 0
 		Loop_countthree = Loop_countthree + 1
+		
 	
 	#Writes the values of the centered cube into a fits file.
 	vip.fits.write_fits('centeredcube_{name}.fits'.format(name=name_input), cube1, verbose=True)	
@@ -967,17 +983,32 @@ reference_xy[1] = int(reference_xy[1])
 """
 print( 'Will now reduce the data using full frame PCA' )
 
-#Calculates the optimum number of principal components to use in PCA reduction.
+#Reduce the image using full frame PCA then plots the image..
+# Optimal number of PCs are calculated
 
-fr_pca1 = vip.pca.pca(
-	cube, angs, fwhm=fwhm, 
+ffpca_output = vip.pca.pca_fullfr.pca(
+	cube, angs, fwhm = fwhm,
 	source_xy = (reference_xy[0], reference_xy[1]),
-	mask_center_px = None, ncomp = (1,20,1)
+	mask_center_px = None, ncomp = (1, len(cube) ,1),
+	full_output=True
 	)
 
-#Reduces the image using full frame PCA then plots the image.
-#fr_pca1 = vip.pca.pca(cube, angs, ncomp=opt_pcs, mask_center_px=None)
-#fr_pca1 = vip.pca.pca(cube, angs, mask_center_px=None, ncomp)			
+	
+# vip_hci.pca.pca_fullfr.pca returns this outputs:
+# (if full_output=True and source_xy != None)
+# 0 - Residuals cube (for STIM map input)
+# 1 - PCA Frame
+# 2 - Pandas dataframe with PCs, S/Ns and fluxes
+#
+#<class 'numpy.ndarray'> 10,1024,1024
+#<class 'numpy.ndarray'> 1024,1024
+#<class 'pandas.core.frame.DataFrame'> 10
+
+
+fr_pca1 = ffpca_output[1]
+resid_cube_derot = ffpca_output[0]
+
+		
 
 hciplot.plot_frames( 
 		fr_pca1, 
@@ -1039,6 +1070,8 @@ np.savetxt('{name}_starphot'.format(name=name_input), starphot_array)
 
 """
 ------ 9 - INJECT FAKE PLANETS
+"""
+
 """
 number_planets = 0.1 #Initialises the variable as an odd number to use the integer check loop.
 
@@ -1172,6 +1205,7 @@ vip.fits.write_fits('new_Planet_injectionPCA.fits', fr_pca3, verbose=True)
 
 _ = vip.metrics.frame_analysis.frame_quick_report(fr_pca3, fwhm=fwhm, source_xy=(synplanetlocation[0],synplanetlocation[1]))
 	#give nan in here (?)
+"""
 	
 """
 Some code commented here (planet subtraction)
@@ -1199,20 +1233,63 @@ pt_sub = 0.1
 """
 ------ 10 - CONTRAST CURVES
 """
-PCA_contrast_curve = contrast_curve(
+
+psf = vip.metrics.fakecomp.normalize_psf(psf, fwhm, size=101, threshold=None, mask_core=None)
+
+PCA_contrast_curve = vip.metrics.contrcurve.contrast_curve(
 	cube, angs, psf, fwhm, pxscale_keck, starphot,
-	sigma=sigma, nbranch=n_branches, algo=vip.pca.pca, 
-	ncomp=opt_pcs, debug=True,save_plot='PCA'
+	sigma=sigma, nbranch=1, algo=vip.pca.pca, 
+	ncomp=40, debug=True,save_plot='PCA'
 	)
 
-LLSG_contrast_curve = contrast_curve(
+LLSG_contrast_curve =  vip.metrics.contrcurve.contrast_curve(
 	cube, angs, psf, fwhm, pxscale_keck, starphot,
-	sigma=sigma, nbranch=n_branches, algo=vip.llsg.llsg, 
+	sigma=sigma, nbranch=1, algo=vip.llsg.llsg, 
 	debug=True,save_plot='LLSG'
 	)
 
 Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sigma,name_input)
 
 
+
+"""
+------ 11 - STIM MAPS
+"""
+print("Computing STIM map...")
+stim_map = vip.metrics.compute_stim_map(resid_cube_derot)
+
+
+hciplot.plot_frames( 
+		stim_map, 
+		label = 'STIM map of {name}'.format(name=name_input), 
+		grid = False, 
+		size_factor = 5
+		)
+
+#Loop asks user if they would like to save the image.
+print( 'Would you like to save the image?' )
+questionsave = Checkfunction()
+
+if questionsave == 0:	
+	vip.fits.write_fits('STIM_map_{name}.fits'.format(name=name_input), stim_map, verbose=True)
+	
+	
+"""
+------ 12 - ANDROMEDA MAP
+"""
+
+
+
+
 print( "===========================	End of the program	===========================" )
 
+
+
+
+
+
+
+
+
+
+# Some space here
