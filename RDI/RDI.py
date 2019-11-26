@@ -8,7 +8,6 @@
 
             USAGE:
                 python RDI.py [science cube] [refcube=None]
-
 """
 
 
@@ -20,7 +19,6 @@ import sys
 HEADER_NAME_PARANG = "PARANG"
 PSF_SOURCE = "psf.fits"
 PSF_XY = [95, 111]
-
 
 """
 =================================================================================================
@@ -101,6 +99,7 @@ if __name__ == "__main__":
             print("File %s does not exist." %ref_cube_path)
             sys.exit()
 
+    # Read in angle list
     angle_list = ReadAngles(target_name, True)
 
     """
@@ -109,12 +108,14 @@ if __name__ == "__main__":
     inner_rad_rdi = 0.1         # Guessed value
     PCA_comps = 1               # how to find this?
 
+    # Load in the PSF fits file
     try:
         psf = vip.fits.open_fits(PSF_SOURCE, n=0, header=False, ignore_missing_end=True, verbose=False)
     except NameError:
         print("Could not load file at %s" %PSF_SOURCE)
         sys.exit()
 
+    # Get the FWHM value
     gauss=vip.var.fit_2dgaussian(psf, crop=True, cropsize=30, cent=(PSF_XY[0], PSF_XY[1]), full_output=False, debug=False)
 
     print(gauss[0:1])
@@ -123,14 +124,17 @@ if __name__ == "__main__":
     fwhm = np.mean([fwhm_x, fwhm_y])
     print(fwhm)
 
+    # Compute the central mask size in pixels
     mask_center_pixels = inner_rad_rdi * fwhm
 
+    # Perform RDI/ADI 
     output_cube = vip.pca.pca_fullfr.pca(
         cube=science_cube, angle_list=angle_list, cube_ref=ref_cube,
         ncomp=1, svd_mode="lapack", scaling="spat-mean",
         mask_center_px=mask_center_pixels, source_xy=(PSF_SOURCE[0], PSF_SOURCE[1]),
         fwhm=fwhm, full_output=False, verbose=True)
 
+    # Save final cube to target_RDI.fits
     output_filename = target_name + "_RDI.fits"
     hdu_new = fits.PrimaryHDU(output_cube)
     hdu_new.writeto(output_filename, overwrite=True)
