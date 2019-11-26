@@ -9,9 +9,6 @@
             USAGE:
                 python RDI.py [science cube] [refcube=None]
 
-            TODO:
-                - Does (my) analysis need upgrading to python 3 + vip.0.9.11?????
-                - How to input the science cube?
 """
 
 
