@@ -1,7 +1,6 @@
 # Age Analysis Code
 
-Age Code written in Python, formatted as a Jupyter Notebook.
-Requires two empty folders to work, named 'agedist' and 'figures'.
+Age Code written in Python.
 
 ## Inputs
 
@@ -13,4 +12,4 @@ from file 'Sasha_GaiaDR2_max1.tsv.
 
 Generates ages for input stars in 'ages.tex' file.
 Generates histogram data for each star in 'agedist' folder.
-Generates histogram plots for each star in Â'figures' folder.
+Generates histogram plots for each star in 'figures' folder.
