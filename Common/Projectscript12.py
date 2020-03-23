@@ -3,15 +3,25 @@
 
 PROJECT SCRIPT 12
 
-Script last updated 9/10/19
-this script works for VIP 0.9.11 in Python3 environment (current version on analysis)
+Script last updated 21/01/2020
+Works for VIP 0.9.11 in Python3 environment (current version on analysis)
+
+For any help, contact:
+	Jorge Fernández
+	MPhys student with Sasha, 2019/2020
+	jorgefz.fernandez@gmail.com
 
 **************************************INSTRUCTIONS**********************************
 
+Place script on the folder where the science images are.
+Run with python.
 Enter the name of the star to run the script, e.g. HIP_99542. 
-Put this folder in the epoch file. 
 
-Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when running this script (avaliable in DangerZone)
+
+Ignore this for the moment:
+	--Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when running this script (avaliable in DangerZone)
+
+
 
 **************************************UPDATES**************************************
 
@@ -71,7 +81,13 @@ Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when runnin
 	2. Disable Planet subtraction (there should a bug in matplotlib)
 
 
-----
+----------------------------------------
+
+DEVELOPMENT CONTINUED BY JORGE FERNANDEZ
+
+Contact: jorgefz.fernandez@gmail.com
+
+
 02/10/19
 	1. Porting to Python3
 		Changed 'print' to 'print()'
@@ -124,6 +140,16 @@ Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when runnin
 	Implemented STIM map using residual cube from Annular PCA
 	Implemented STIm map using residual cube from LLSG
 
+20/01/2020
+	Updated Andromeda Oversampling Factor
+
+21/01/2020
+	Fixed Contrast Curves with James Davies' work.
+
+23/03/2020
+	Reworked Recentering function
+	Added more recentering algorithms
+
 		
 		
 		
@@ -144,9 +170,15 @@ STUCTURE
 
 	1. Packages
 	
-	2. Input variables
+	2. Global variables
 	
 	3. Functions
+
+	4. Main Functions
+
+	5. Image Processing
+
+
 """ 
 
 
@@ -187,19 +219,26 @@ End of package imports
 
 
 """
-============================	INPUT VARIABLES		=================================
+============================	GLOBAL VARIABLES		=================================
 """
 psf_xy = [95,111]			#Centre of psf.
 reference_xy = [0.1, 0.1]	#Reference bright point defined as a decimal so it loops through the decimal check.
 star_xy = [0.1, 0.1] 		#Centre of the star co-ordinates, defined as a decimal so it loops through the decimal check.
-averageflux = 0				#Initialises the background flux.				#Just a range of flux's for the first guess algorithm .
+
+pxscale_keck = 0.00953 		#Pixel scale for keck 2 [arcsec/pixel]
+
+
+#Initialises the background flux.
+#Just a range of flux's for the first guess algorithm .
+averageflux = 0
+
+# Variables used in unused Planet Injection code
 flvlup = 15000
 flvldown = 1000				#to loop over.
 
 #Initialises the loop counter, loop counter is used to prevent error warning on first trial
 #when looping through integer check functions.
 Loop_count = 0				
-pxscale_keck = 0.00953 		#Pixel scale for keck 2.
 seperation = 60 			#Radial seperation between synthetic planets in terms of pixels.
 starphot = 0				#Initialises the Starphot parametre.
 sigma = 5					#Sets the value of sigma for the contrast curves.
@@ -511,51 +550,79 @@ and the PCA data on the same graph and saves it to a file
 Note: This function is terribly inefficient, could be much 
 better looped over but haven't had the time to do so.
 """
-def Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sigma,name_input):
+def Contrastcurvedata(PCA_contrast_curve, 
+						LLSG_contrast_curve,
+						AnnPCA_contrast_curve,
+						pxscale_keck, sigma, name_input):
 
 	#Saves the PCA,ADI and LLSG curve outputs
 	np.savetxt('new_PCA_{star_name}_curve_outputs'.format(star_name=name_input),PCA_contrast_curve)
 	np.savetxt('new_LLSG_{star_name}_curve_outputs'.format(star_name=name_input),LLSG_contrast_curve)
-	
+	np.savetxt('new_AnnPCA_{star_name}_curve_outputs'.format(star_name=name_input),AnnPCA_contrast_curve)	
 
-	PCA_data = PCA_contrast_curve
-	LLSG_data = LLSG_contrast_curve
+	PCA_data = np.loadtxt('new_PCA_{star_name}_curve_outputs'.format(star_name=name_input))
+	LLSG_data = np.loadtxt('new_LLSG_{star_name}_curve_outputs'.format(star_name=name_input))
+	AnnPCA_data = np.loadtxt('new_AnnPCA_{star_name}_curve_outputs'.format(star_name=name_input))
 	
-	#Initialises the PCA variables (500 being the size).
-	PCA_Distance = np.zeros(500)
-	PCA_Sensitivity_Gauss = np.zeros(500)
-	PCA_Sensitivity_Student = np.zeros(500)
+	#Initialises the contrast curve variables
+	size = 500
+
+	PCA_Distance = np.zeros(size)
+	PCA_Sensitivity_Gauss = np.zeros(size)
+	PCA_Sensitivity_Student = np.zeros(size)
 	
-	LLSG_Distance = np.zeros(500)
-	LLSG_Sensitivity_Gauss = np.zeros(500)
-	LLSG_Sensitivity_Student = np.zeros(500)
+	LLSG_Distance = np.zeros(size)
+	LLSG_Sensitivity_Gauss = np.zeros(size)
+	LLSG_Sensitivity_Student = np.zeros(size)
+
+	AnnPCA_Distance = np.zeros(size)
+	AnnPCA_Sensitivity_Gauss = np.zeros(size)
+	AnnPCA_Sensitivity_Student = np.zeros(size)
+	AnnPCA_noise = np.zeros(size)
+
+	"""
+    PANDAS DATAFRAME: (IF STUDENT == TRUE)
+    0 - sensitivity_gaussian
+    1 - sensitivity_student
+    2 - throughput
+    3 - distance
+    4 - distance_arcsec
+    5 - noise
+    6 - sigma corr
+
+    PANDAS DATAFRAME: (IF STUDENT == FALSE)
+    0 - sensitivity_gaussian
+    1 - throughput
+    2 - distance
+    3 - distance_arcsec
+    4 - noise
+    """
 
 	#Loop loads the PCA outputs into the PCA variables.
-	for a in range (0,500):
-		PCA_Distance[a] = PCA_data[a,0] * pxscale_keck
-		PCA_Sensitivity_Gauss[a] = PCA_data[a,2]
-		PCA_Sensitivity_Student[a] = PCA_data[a,3]	
+	for a in range (0, size):
+		PCA_Distance[a] = PCA_data[a,3] * pxscale_keck
+		PCA_Sensitivity_Gauss[a] = PCA_data[a,0]
+		PCA_Sensitivity_Student[a] = PCA_data[a,1]  
 
-	#Loop loads the LLSG outputs into the LLSG variables.
-		LLSG_Distance[a] = LLSG_data[a,0] * pxscale_keck
-		LLSG_Sensitivity_Gauss[a] = LLSG_data[a,2]
-		LLSG_Sensitivity_Student[a] = LLSG_data[a,3]
+		#Loop loads the LLSG outputs into the LLSG variables.
+		LLSG_Distance[a] = LLSG_data[a,3] * pxscale_keck
+		LLSG_Sensitivity_Gauss[a] = LLSG_data[a,0]
+		LLSG_Sensitivity_Student[a] = LLSG_data[a,1]
+		
+		AnnPCA_Distance[a] = AnnPCA_data[a,3] * pxscale_keck
+		AnnPCA_Sensitivity_Gauss[a] = AnnPCA_data[a,0]
+		AnnPCA_Sensitivity_Student[a] = AnnPCA_data[a,1]
 	
 	#Plotting all 3 on one curve: 
 	fig = plt.figure(figsize=(8,4))		#Initialises the plot.
 	ax1 = fig.add_subplot(111)			#Creates the axis.
 	
-	#Creates and positions the legend.
-	handles, labels = ax1.get_legend_handles_labels()
-	line_up, = plt.plot([1,2,3], label='Line 2')
-	line_down, = plt.plot([3,2,1], label='Line 1')
-	plt.legend(handles=[line_up, line_down])
-	ax1.legend(handles, labels)
-	
 	#Formats the colour and text for the legends, colour represented by hexadecimal.
 	PCA_Legend = mpatches.Patch(color='#fcb141', label='PCA Contrast Curve')
 	LLSG_Legend = mpatches.Patch(color='#2f6fac', label='LLSG Contrast Curve')
-	plt.legend(handles=[PCA_Legend,LLSG_Legend])
+	AnnPCA_Legend = mpatches.Patch(color='red', label='AnnPCA Contrast Curve')
+
+	plt.legend(handles=[PCA_Legend,LLSG_Legend, AnnPCA_Legend])
 	
 	plt.xlabel('Angular separation [arcsec]')	#X Label.
 	plt.ylabel(str(sigma)+' sigma contrast')	#Y Label.
@@ -563,28 +630,26 @@ def Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sig
 	
 	#Sets the y axis scale and the range of limits. 
 	ax1.set_yscale('log')
-	plt.ylim((0.000001,0.01))
+	y_min = 1E-6
+	y_max = 1E-2
+	plt.ylim((y_min, y_max))
 	
 	#Creates the variables that will be plotted.
-	Curve = [0,0]	#Initialises the Curve variable.
+	Curve = [0,0,0]   #Initialises the Curve variable.
+	Curve[2] = plt.plot(AnnPCA_Distance, AnnPCA_Sensitivity_Gauss, linewidth =2, color='red')
 	Curve[1] = plt.plot(PCA_Distance, PCA_Sensitivity_Gauss, linewidth =2, color='#fcb141')
 	Curve[0] = plt.plot(LLSG_Distance, LLSG_Sensitivity_Gauss, linewidth =2, color='#2f6fac')
 	
-	savefig('new_Contrast_curves_no_ADI_{star_name}.png'.format(star_name=name_input))
+	plt.savefig('new_Contrast_curves_no_ADI_{star_name}.png'.format(star_name=name_input))
 
 	plt.show(Curve)
 	
-	#LLSG contrast curve 
+
+
+	#--------- LLSG contrast curve 
 	
 	fig = plt.figure(figsize=(8,4))		#Initialises the plot.
 	ax1 = fig.add_subplot(111)			#Creates the axis.
-	
-	#Creates and positions the legend.
-	handles, labels = ax1.get_legend_handles_labels()
-	line_up, = plt.plot([1,2,3], label='Line 2')
-	line_down, = plt.plot([3,2,1], label='Line 1')
-	plt.legend(handles=[line_up, line_down])
-	ax1.legend(handles, labels)
 	
 	#Formats the colour and text for the legends, colour represented by hexadecimal.
 	LLSG_Legend = mpatches.Patch(color='#2f6fac', label='LLSG Contrast Curve')
@@ -596,28 +661,25 @@ def Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sig
 	
 	#Sets the y axis scale and the range of limits. 
 	ax1.set_yscale('log')
-	plt.ylim((0.000001,0.01))
+	y_min = 1E-6
+	y_max = 1E-2
+	plt.ylim((y_min, y_max))
 	
 	#Creates the variables that will be plotted.
 	Curve = 0	#Initialises the Curve variable.
 	Curve = plt.plot(LLSG_Distance, LLSG_Sensitivity_Gauss, linewidth =2, color='#2f6fac')
 	
 	#Saves the figure and then shows the plot. 
-	savefig('new_LLSG_curves_{star_name}.png'.format(star_name=name_input))
+	plt.savefig('new_LLSG_curves_{star_name}.png'.format(star_name=name_input))
 
 	plt.show(Curve)
 	
-	#PCA contrast curve. 
+
+
+	#--------- PCA contrast curve 
 	
 	fig = plt.figure(figsize=(8,4))		#Initialises the plot.
 	ax1 = fig.add_subplot(111)			#Creates the axis.
-	
-	#Creates and positions the legend.
-	handles, labels = ax1.get_legend_handles_labels()
-	line_up, = plt.plot([1,2,3], label='Line 2')
-	line_down, = plt.plot([3,2,1], label='Line 1')
-	plt.legend(handles=[line_up, line_down])
-	ax1.legend(handles, labels)
 	
 	#Formats the colour and text for the legends, colour represented by hexadecimal.
 	PCA_Legend = mpatches.Patch(color='#fcb141', label='PCA Contrast Curve')
@@ -628,7 +690,9 @@ def Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sig
 	
 	#Sets the y axis scale and the range of limits. 
 	ax1.set_yscale('log')
-	plt.ylim((0.000001,0.01))
+	y_min = 1E-6
+	y_max = 1E-2
+	plt.ylim((y_min, y_max))
 	
 	#Creates the variables that will be plotted.
 	Curve = 0	#Initialises the Curve variable.
@@ -637,6 +701,32 @@ def Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sig
 	#Saves the figure and then shows the plot. 
 	savefig('new_PCA_curve_{star_name}.png'.format(star_name=name_input))
 	plt.show(Curve)
+
+
+
+	#--------- AnnPCA contrast curve 
+
+	#Formats the colour and text for the legends, colour represented by hexadecimal.
+	AnnPCA_Legend = mpatches.Patch(color='red', label='AnnPCA Contrast Curve')
+	plt.legend(handles=[AnnPCA_Legend])
+    
+	plt.xlabel('Angular separation [arcsec]')   #X Label.
+	plt.ylabel(str(sigma)+' sigma contrast')    #Y Label.
+    
+    #Sets the y axis scale and the range of limits. 
+	ax1.set_yscale('log')
+	y_min = 1E-6
+	y_max = 1E-2
+	plt.ylim((y_min, y_max))
+    
+	#Creates the variables that will be plotted.
+	Curve = 0   #Initialises the Curve variable.
+	Curve = plt.plot(AnnPCA_Distance, AnnPCA_Sensitivity_Gauss, linewidth =2, color='red')
+    
+	#Saves the figure and then shows the plot. 
+	plt.savefig('new_AnnPCA_curve_{star_name}.png'.format(star_name=name_input))
+	plt.show(Curve)
+
 
 
 """
@@ -771,7 +861,83 @@ End of defining functions
 """
 
 
+def CenteringLoop(cube_orig, angs, psf):
 
+	
+	#---------------------------------------------------------------
+	print("Recentering Cube")
+	print(" There are two ways to recenter the cube")
+	print(" 1. Use a 2D Gaussian Fit")
+	print(" 2. Recenter manually. (Use if Gaussian fit doesn't work. Works if all images are already aligned but not in the center of the image)")
+	
+	while True:
+		print(" Choose 1 (Gaussian fit) or 2 (manual fit): ")
+		fit_method = input()
+		if fit_method == '1' or fit_method == '2':
+			break
+		else:
+			print(" ->Option not recognised, please input '1' or '2'. ")
+	
+	# Initialise variable
+	star_xy = [0.1, 0.1]
+	
+	print("Using DS9, open any image in Newcube.fits")
+	star_xy[0] = input("Input the x coordinate of the central position of the star: ")
+	star_xy[0] = int(star_xy[0])
+		
+	star_xy[1]=input("Input the x coordinate of the central position of the star: ")
+	star_xy[1] = int(star_xy[1])
+	
+	
+	#Opens the cube (using VIP) with cube_orig as HDU:0 and calls it cube_orig, 
+	#and the parallactic angles from a text file.
+	#Uses VIP to also open the point spread function previously loaded in.
+		
+	
+	cube1 = cube_orig
+	
+	# Gaussian Fit
+	if fit_method == '1':
+		print(" --2D Gaussian Fit")
+		print( "Fitting a 2D gaussian to centre the images..." )
+		#Uses VIP's 2D gaussian fitting algorithm to centre the cube.
+		cube1, shy1, shx1, fwhm = Gaussian_2d_Fit( psf, cube_orig, star_xy)
+	
+	# Manual Fit
+	elif fit_method == '2':
+		print(" --Manual Fit")
+		# Calculate shifts here
+		image_centre = [512, 512]
+		print(" Image centre is at", image_centre)
+		shift_x = image_centre[0] - star_xy[0]
+		shift_y = image_centre[1] - star_xy[1]
+		cube1 = vip.preproc.recentering.cube_shift(cube_orig, shift_y, shift_x)
+		fwhm = Calculate_fwhm(psf)
+		
+	
+	#Writes the values of the centered cube into a fits file.
+	vip.fits.write_fits('centeredcube_{name}.fits'.format(name=name_input), cube1, verbose=True)	
+
+	cube = cube1
+	#Loads up the centered cube.
+	#Plots the original cube vs the new centered cube.
+
+	im1 = vip.preproc.cosmetics.frame_crop(cube_orig[0], 1000, verbose=False)
+	im2 = vip.preproc.cosmetics.frame_crop(cube[0], 1000, verbose=False)
+
+	hciplot.plot_frames( 
+		(im1, im2), 
+		label = ('Original first frame', 'First frame after recentering'), 
+		grid = True, 
+		size_factor = 4
+		)
+	
+	print( "Open DS9 and look through the centred data cube at each frame making sure it is centred.")
+	print( "If you're not happy with it, redo centring" )
+	print( "Redo Centring?" )
+	cent_loop = Checkfunction()
+
+	return cube, cent_loop
 
 
 
@@ -937,13 +1103,13 @@ Returns LLSG frame, and residuals cube for STIM map
 def LLSG(cube, angs, fwhm, name_input):
 
 	print( "\n   --- LLSG")
-	Rank = input("What rank of llsg would you like to do? (default =6)\n")
-	Rank = int(Rank)
+	rank = input("What rank of llsg would you like to do? (default = 6)\n")
+	rank = int(rank)
 	
 	#Reduces the image using the LLSG algorithm then plots the image.
 	print(fwhm)
 	llsg_output = vip.llsg.llsg(cube, angs, fwhm=fwhm, 
-							rank = Rank, thresh = 2, 
+							rank = rank, thresh = 2, 
 							max_iter = 20, random_seed = 10,
 							full_output = True)
 
@@ -977,7 +1143,7 @@ def LLSG(cube, angs, fwhm, name_input):
 		vip.fits.write_fits('new_LLSG_{name}.fits'.format(name=name_input), llsg_frame, verbose=True)
 
 
-	return llsg_frame, llsg_residual_sparse
+	return llsg_frame, llsg_residual_sparse, rank
 
 
 
@@ -1015,7 +1181,7 @@ def StimMap(residuals_cube, name_input, origin_algo):
 """
 -----------------	CONTRAST CURVES	-----------------
 """
-def ContrastCurves(cube, angs, psf, fwhm, starphot, optimal_pcs, name_input):
+def ContrastCurves(cube, angs, psf, fwhm, starphot, optimal_pcs, name_input, llsg_rank):
 
 
 	print(" Performing Starphot calculation...")
@@ -1042,15 +1208,24 @@ def ContrastCurves(cube, angs, psf, fwhm, starphot, optimal_pcs, name_input):
 		sigma=sigma, nbranch=1, algo=vip.pca.pca, 
 		ncomp=optimal_pcs, debug=True,save_plot='PCA'
 		)
-	# ncomp = 40
+	
+	AnnPCA_contrast_curve = vip.metrics.contrcurve.contrast_curve(
+    	cube, angs, psf, fwhm, pxscale_keck, starphot,
+    	sigma=sigma, nbranch=1, algo=vip.pca.pca_local.pca_annular, 
+    	debug=True,save_plot='AnnPCA', verbose=2, student=True,
+    	ncomp=optimal_pcs
+    	)
 
 	LLSG_contrast_curve =  vip.metrics.contrcurve.contrast_curve(
 		cube, angs, psf_norm, fwhm, pxscale_keck, starphot,
 		sigma=sigma, nbranch=1, algo=vip.llsg.llsg, 
-		debug=True,save_plot='LLSG'
+		debug=True,save_plot='LLSG', rank = llsg_rank
 		)
 
-	Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sigma, name_input)
+	Contrastcurvedata(FFPCA_contrast_curve, LLSG_contrast_curve, AnnPCA_contrast_curve, 
+						pxscale_keck, sigma, name_input)
+
+
 
 
 
@@ -1064,7 +1239,8 @@ def ContrastCurves(cube, angs, psf, fwhm, starphot, optimal_pcs, name_input):
 def Andromeda(cube, angs, psf, fwhm):
 	
 	print(" Running ANDROMEDA algorithm...")
-	print(" (may take an hour or more to complete)")
+	print(" (Takes around 45 min to 1h 30min)")
+	print(" (So sit back, relax, and have a cuppa)")
 	
 	# Normalises PSF (Done above too)
 	psf = vip.metrics.fakecomp.normalize_psf(psf, fwhm, size=100,
@@ -1072,53 +1248,53 @@ def Andromeda(cube, angs, psf, fwhm):
 										mask_core=None,
 										force_odd = False)
 
+	print("Cube has shape", cube.shape)
+	print("PSF has shape", psf.shape)
+
 	# Andromeda requires even-sized images, hence "force_odd = False" is used.
 
 
 	# In NIRC2, the Kp filter has central wavelength 2.124 um
-	#			and Bandpass width 0.351 um
 	# Source: https://www2.keck.hawaii.edu/inst/nirc2/filters.html
+	Kp_wavelength = 2.124E-6
+	
+	# Keck Telescope has an aperture diameter of 10 meters
+	diam_tel = 10
+	
+	# Pixel scale in mas/pixel
+	pxscale = pxscale_keck * 1E3
+	
+	# Nyquist pixel scale at Shannon wavelength in mas/pixel
+	pxscale_nyq = 1/2 * (180*3600*1E3 / np.pi) * (Kp_wavelength / diam_tel)
+	
+	oversampling_factor = pxscale_nyq / pxscale
 
-	print("Cube has shape", cube.shape)
-	print("PSF has shape", psf.shape)
-
-	survey_wavelength = 2.124
-	shannon_wavelength = 0.351
-
-	oversampling_factor = survey_wavelength/shannon_wavelength
-
-	# Ran code on HIP544 with default settings and iwa=1. Outputs:
-	"""
-	WARNING: 18 frame(s) cannot be used because it wasn't possible to find any other frame to couple with them. 
-	Their indices are: [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
-	For all frames to be used in this annulus, the minimum separation must be set at most to 0.3631489127511684 *lambda/D 
-	(corresponding to 4.395032995347474 pixels).
-	"""
-	# The set min_sep to 0.36
-
-
+	# Set min_sep to 0.36 because it works.
 	andromeda_output = vip.andromeda.andromeda(
 						cube,
 						oversampling_factor,
-						angs,
-						psf,
+						angles = angs,
+						psf = psf,
 						iwa = 1,
 						min_sep = 0.36,
 						verbose = True
 						)
 
-	print("Andromeda output length", len(andromeda_output))
+	print("Andromeda output length:", len(andromeda_output))
 
-	contrast_andr = andromeda_output[0]
-	snr_map_andr = andromeda_output[1]
-	snr_norm_map_andr = andromeda_output[2]
-	stdcontrast_map_andr = andromeda_output[3]
-	stdcontrast_norm_andr = andromeda_output[4]
-	likelihood_andr = andromeda_output[5]
-	ext_radius_andr = andromeda_output[6]
+	contrast_andr = andromeda_output[0]			# Contrast map / flux map
+	snr_map_andr = andromeda_output[1]			# SNR map
+	snr_norm_map_andr = andromeda_output[2]		# Normalised SNR Map
+	stdcontrast_map_andr = andromeda_output[3]	# Standard Deviation Contrast map
+	stdcontrast_norm_andr = andromeda_output[4]	# Normalised Standard Deviation Contrast map
+	likelihood_andr = andromeda_output[5]		# Likelihood map
+	ext_radius_andr = andromeda_output[6]		# External/cut-off processing radius
 
-
+	vip.fits.write_fits('ANDR_snrmap_{name}.fits'.format(name=name_input), snr_map_andr, verbose=True)
+	vip.fits.write_fits('ANDR_snrnorm_{name}.fits'.format(name=name_input), snr_norm_map_andr, verbose=True)
 	vip.fits.write_fits('ANDR_contrast_{name}.fits'.format(name=name_input), contrast_andr, verbose=True)
+	vip.fits.write_fits('ANDR_contrast_stddev_{name}.fits'.format(name=name_input), stdcontrast_map_andr, verbose=True)
+	vip.fits.write_fits('ANDR_contrastnorm_stddev_{name}.fits'.format(name=name_input), stdcontrast_norm_andr, verbose=True)
 	vip.fits.write_fits('ANDR_likelihood_{name}.fits'.format(name=name_input), likelihood_andr, verbose=True)
 
 	print("ext_radius = ", ext_radius_andr)
@@ -1127,6 +1303,10 @@ def Andromeda(cube, angs, psf, fwhm):
 
 
 
+#*******************************************************************
+#*******************************************************************
+#*******************************************************************
+#*******************************************************************
 
 
 
@@ -1145,139 +1325,73 @@ print("\n Version 12 \n\n")
 """
 ------ 1 - STAR NAME AND PRE-PROCESSING LOOP
 """
-	
 name_input = input('Name of the star (example = HIP_544):  ')
-Centring_loop = 0 # Initialise loop to allow for re centring
 
-while Centring_loop == 0:
-	
-	#Loads the filenames into python and counts the number of files.
+#Loads the filenames into python and counts the number of files.
+file_names = ReadImageFilenames(name_input)
+Number_images = len(file_names)
+
+
+"""
+	------ 2 - CREATE DATA CUBE
+"""
+print( "Would you like to create the data cube?")
+
+#Loop runs the Readangles and Buildcube functions, building the data cube.
+if Checkfunction() == 0:
 	file_names = ReadImageFilenames(name_input)
 	Number_images = len(file_names)
-	
-	
-	"""
-	------ 2 - CREATE DATA CUBE
-	"""
-	build_check = 0
-	#Initialises the variable which is used to build the cube (or not).
-	print( "Would you like to create the data cube?")
-	build_check = Checkfunction()
+	Readangles(Number_images,name_input)
+	Buildcube(Number_images,name_input)
 
-	#Loop runs the Readangles and Buildcube functions, building the data cube.
-	if build_check == 0:
-		file_names = ReadImageFilenames(name_input)
-		Number_images = len(file_names)
-		Readangles(Number_images,name_input)
-		Buildcube(Number_images,name_input)
 
-	
-	print( "Open DS9 and look through the created data cube at each frame, taking note of the bad frames" )
-	remove_check = 0
-	
-	
-	"""
-	------ 3 - REMOVE BAD IMAGES
-	"""
-	print( "Would you like to remove any image?" )
-	remove_check = Checkfunction()
+"""
+------ 3 - REMOVE BAD IMAGES
+"""
+print( "Would you like to remove any bad frames?" )
 
-	#Loop runs the Removeimage function and then overwrites the new shortened list to
-	#the original text file. 
-	if remove_check == 0:
-		
-		file_names = Removeimage(Number_images,name_input)
-		file_names = file_names.tofile('{name}_filenames.txt'.format(name=name_input), sep ="\n", format='%s')
-		file_names = ReadImageFilenames(name_input)
-		Number_images = len(file_names)
-		Readangles(Number_images,name_input)
-		Buildcube(Number_images,name_input)
-	
+#Loop runs the Removeimage function and then overwrites the new shortened list to
+#the original text file. 
+if Checkfunction() == 0:		
+	file_names = Removeimage(Number_images,name_input)
+	file_names = file_names.tofile('{name}_filenames.txt'.format(name=name_input), sep ="\n", format='%s')
+	file_names = ReadImageFilenames(name_input)
+	Number_images = len(file_names)
+	Readangles(Number_images,name_input)
+	Buildcube(Number_images,name_input)
 
-	"""
-	------ 4 - RECENTERING
-	"""
-	#Loads the psf and the cube fits into python.
-	initialpsf = './psf.fits'			
-	cube = './Newcube.fits'
-	
-	
-	print("Recentering Cube")
-	print(" There are two ways to recenter the cube")
-	print(" 1. Use a 2D Gaussian Fit=")
-	print(" 2. Recenter manually. (Use if Gaussian fit doesn't work. Works if all images are already aligned but not in the center of the image)")
-	
-	while True:
-		print(" Choose 1 (Gaussian fit) or 2 (manual fit): ")
-		fit_method = input()
-		if fit_method == '1' or fit_method == '2':
-			break
-		else:
-			print("Option not recognised")
-	
-	print(" Fit method = ", fit_method)
-	
-	
-	star_xy = [0.1, 0.1]
-	
-	print("Using DS9, open any image in Newcube.fits")
-	star_xy[0] = input("Input the x coordinate of the central position of the star: ")
-	star_xy[0] = int(star_xy[0])
-		
-	star_xy[1]=input("Input the x coordinate of the central position of the star: ")
-	star_xy[1] = int(star_xy[1])
-	
-	
-	#Opens the cube (using VIP) with cube_orig as HDU:0 and calls it cube_orig, 
-	#and the parallactic angles from a text file.
-	#Uses VIP to also open the point spread function previously loaded in.
-		
-	cube_orig = vip.fits.open_fits(cube)
-	angs = np.loadtxt( '{name}_angles.txt'.format(name = name_input) )
-	psf = vip.fits.open_fits(initialpsf, n=0, header=False, ignore_missing_end=True, verbose=True)
-	
-	cube1 = cube_orig
-	
-	# Gaussian Fit
-	if fit_method == '1':
-		print(" --2D Gaussian Fit")
-		print( "Fitting a 2D gaussian to centre the images..." )
-		#Uses VIP's 2D gaussian fitting algorithm to centre the cube.
-		cube1, shy1, shx1, fwhm = Gaussian_2d_Fit( psf, cube_orig, star_xy)
-	
-	# Manual Fit
-	elif fit_method == '2':
-		print(" --Manual Fit")
-		# Calculate shifts here
-		image_centre = [512, 512]
-		print(" Image centre is at", image_centre)
-		shift_x = image_centre[0] - star_xy[0]
-		shift_y = image_centre[1] - star_xy[1]
-		cube1 = vip.preproc.recentering.cube_shift(cube_orig, shift_y, shift_x)
-		fwhm = Calculate_fwhm(psf)
-		
-	
-	#Writes the values of the centered cube into a fits file.
-	vip.fits.write_fits('centeredcube_{name}.fits'.format(name=name_input), cube1, verbose=True)	
 
-	cube = cube1
-	#Loads up the centered cube.
-	#Plots the original cube vs the new centered cube.
+"""
+------ 4 - RECENTERING
+"""
 
-	im1 = vip.preproc.cosmetics.frame_crop(cube_orig[0], 1000, verbose=False)
-	im2 = vip.preproc.cosmetics.frame_crop(cube[0], 1000, verbose=False)
+# Retrieving angles and PSF
+angs = np.loadtxt( '{name}_angles.txt'.format(name = name_input) )
+psf = vip.fits.open_fits('./psf.fits', n=0, header=False, ignore_missing_end=True, verbose=False)
 
-	hciplot.plot_frames( 
-		(im1, im2), 
-		label = ('Original first frame', 'First frame after recentering'), 
-		grid = True, 
-		size_factor = 4
-		)
-	
-	print( "Open DS9 and look through the centred data cube at each frame making sure it is centred.")
-	print( "If you're not happy with it, redo centring" )
-	print( "Redo Centring?" )
-	Centring_loop = Checkfunction()
+print(" Would you like to recenter the cube? ")
+cent_loop = Checkfunction()
+
+if cent_loop == 0:
+	cube_orig = vip.fits.open_fits('./Newcube.fits')
+	re_loop = 0
+	while re_loop == 0:
+		cube, re_loop = CenteringLoop(cube_orig, angs, psf)
+
+elif cent_loop == 1:
+	cube = vip.fits.open_fits('centeredcube_{name}.fits'.format(name=name_input))
+	#Cropping cube to even size (1022x1022)
+	cube = vip.preproc.cosmetics.cube_crop_frames(
+									cube, 1022, verbose=False, force=True)
+
+fwhm = Calculate_fwhm(psf)
+star_xy = [512.0, 512.0]
+
+
+print("Cube =", cube.shape )
+print("PSF =", psf.shape )
+
+	#---------------------------------------------------------------
 
 
 
@@ -1288,6 +1402,8 @@ while Centring_loop == 0:
 # ****************************************************************
 
 
+
+
 # Full Frame PCA
 ffpca_frame, optimal_pcs = FullFramePCA(cube, angs, fwhm, name_input)
 
@@ -1295,14 +1411,15 @@ ffpca_frame, optimal_pcs = FullFramePCA(cube, angs, fwhm, name_input)
 annpca_frame, pca_residuals = AnnularPCA(cube, angs, fwhm, name_input)
 
 # LLSG
-llsg_frame, llsg_residuals = LLSG(cube, angs, fwhm, name_input)
+llsg_frame, llsg_residuals, llsg_rank = LLSG(cube, angs, fwhm, name_input)
 
 # STIM Map
 StimMap(pca_residuals, name_input, "PCA")
 StimMap(llsg_residuals, name_input, "LLSG")
 
 # Contrast Curves
-ContrastCurves(cube, angs, psf, fwhm, starphot, optimal_pcs, name_input)
+	# Requires running PCA, AnnPCA, and LLSG
+#ContrastCurves(cube, angs, psf, fwhm, starphot, optimal_pcs, name_input, llsg_rank)
 
 # Andromeda
 Andromeda(cube, angs, psf, fwhm)
