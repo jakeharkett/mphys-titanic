@@ -96,8 +96,8 @@ Further developed by Jorge Fernández
 	Try again with a smaller number of points in Monte Carlo simulation.
 	
 	- Error on star ---: could not interpolate to model.
-	Could not interpolate star data with MIST models for an unknwon reaso.
-	Most likely, the generated distributions overrun the model bounds.
+	Could not interpolate star data with MIST models for an unknown reason.
+	Most likely, the generated distributions overran the model bounds.
 	Try again with a smaller number of points in Monte Carlo simulation.
 
 
@@ -221,6 +221,7 @@ def model_2dinterp(xdata, ydata, xmodel, ymodel, zmodel, interp_method='linear')
 	zdata = griddata(points, zmodel, (xdata,ydata), method=interp_method)
 	return zdata
 
+# Checks that input stellar data is valid.
 def check_star(star, i, star_num):
 
 	cols = ('Plx', 'e_Plx', 'Gmag', 'e_Gmag',
