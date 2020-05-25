@@ -13,9 +13,11 @@
 Original Author:
 	Trevor David (tdavid@caltech.edu)
 
-Further developed by Jorge Fernandez
+Further developed by Jorge Fernández
 	(jorgefz.fernandez@gmail.com)
 
+	
+	Developed in Python 3
 
 	INPUTS:
 		- Input stars
@@ -31,13 +33,21 @@ Further developed by Jorge Fernandez
 			e_RPmag	Red Gaia mag error
 
 		- MIST Isochrones datafile
+		Filename = "MIST_Gaia_vvcrit0.4.iso.cmd"
 		File that contains isochrones to plot
 		Various ages and for various filters (Gaia mags, 2MASS mags...)
 		Here we use Gaia mags, and ages 1, 10, 100 Myr, and 1 10 Gyr tracks
 		Source:
 			MIST - MESA Isochrones and Stellar Tracks
 			https://arxiv.org/abs/1604.08592
+		Webpage:
+			http://waps.cfa.harvard.edu/MIST/model_grids.html
+			"Isochrones: Synthetic Photometry" -> "v/vcrit=0.4" -> "UBV(RI)c + 2MASS JHKs + Kepler + Hipparcos + Tycho + Gaia (116MB)"
+		Download:
+			http://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_vvcrit0.4_UBVRIplus.txz
+			-> MIST_v1.2_feh_p0.00_afe_p0.0_vvcrit0.4_basic.iso
 
+		
 	OUTPUTS:
 		- Calculated ages and uncertainties for each star
 		in files 'ages.tex' and 'ages.txt'
@@ -45,6 +55,52 @@ Further developed by Jorge Fernandez
 		- Individual CMD plots and age histograms in 'figures' folder
 		- Histogram data in 'agedist' folder
 	
+	
+	HOW TO USE:
+
+	1) Place 'age_analysis.py' and 'MIST_Gaia_vvcrit0.4.iso.cmd'
+	in same directory.
+
+	2) Place file with stellar data in same directory.
+
+	3) Execute python script using command line interface.
+
+	4) Input filename of star data.
+
+	5) Let the program run.
+
+
+	POSSIBLE ERRORS:
+	
+	- Error: file -- not found
+	Star data file not found given input filename.
+
+	- Error: star data file has unexpected formatting.
+	Expected column names not found in star data file.
+	Please, check requirements above for star data formatting.
+	Use a semicolon delimiter, with the first row being the column names,
+	and rows below the corresponding data for each star.
+
+	- Error: models file 'MIST_Gaia_vvcrit0.4.iso.cmd' not found.
+	The file with the MIST CMD models was not found.
+	Please, ensure that is named 'MIST_Gaia_vvcrit0.4.iso.cmd'
+	and is placed in same directory as this script.
+
+	- Error on star --: '--' field is not a number.
+	One of the star's data fields could not be interpreted as a float.
+	Either because it's missing or has an invalid value.
+
+	- Error on star --: parallax distribution has negative values (errors too large).
+	Parallax of star has uncertantities that are too large,
+	causing the generated distribution to have values lower or equal to zero.
+	Try again with a smaller number of points in Monte Carlo simulation.
+	
+	- Error on star ---: could not interpolate to model.
+	Could not interpolate star data with MIST models for an unknwon reaso.
+	Most likely, the generated distributions overrun the model bounds.
+	Try again with a smaller number of points in Monte Carlo simulation.
+
+
 
 """
 
@@ -76,22 +132,15 @@ mpl.rcParams['savefig.bbox'] = 'tight'
 
 # Function takes relative green magnitude and parallax
 # Returns absolute green magnitude
-
 def absolute_Gmag(gmag, plx):
 	#NOTE: Computing distance simply as 1/plx. There may be offsets or biases that one needs to worry about,
 	#particularly for the closest targets (see papers by Stassun & Torres, Bailer-Jones, etc.)
 	#Also note, assuming Gmag and Plx errors are uncorrelated here.
 
 	_dist = 1.0e3/plx
-	_mu   = 5.0*np.log10(_dist)-5.0           # Distance modulus
-	_MG   = gmag-_mu
+	_mu   = 5.0*np.log10(_dist) - 5.0
+	_MG   = gmag - _mu
 	return _MG
-
-#def BPRP(bpmag, e_bpmag, rpmag, e_rpmag):
-    #Again, assuming BP and RP errors are uncorrelated
-#    _bp = np.random.normal(bpmag, e_bpmag, npts)
-#    _rp = np.random.normal(rpmag, e_rpmag, npts)
-#    return _bp-_rp
 
 
 
@@ -112,7 +161,7 @@ def camd_plot(mist, xdata=None, ydata=None, xerr=None, yerr=None):
 	        # np.where gets data from MIST file that matches log10ages[i] age, and 'EEP' is less than 700 (resolution?) 
 	    plt.plot(xisoc[arg], yisoc[arg], label=isoc_labels[i])
 	    
-	if len(xdata)>0:
+	if xdata.size>0:
 	    plt.plot(xdata, ydata, 'ko', mfc='None')
 	    
 
@@ -172,6 +221,25 @@ def model_2dinterp(xdata, ydata, xmodel, ymodel, zmodel, interp_method='linear')
 	zdata = griddata(points, zmodel, (xdata,ydata), method=interp_method)
 	return zdata
 
+def check_star(star, i, star_num):
+
+	cols = ('Plx', 'e_Plx', 'Gmag', 'e_Gmag',
+			'BPmag', 'e_BPmag', 'RPmag', 'e_RPmag')
+
+	for c in cols:
+		# Check if value can be interpreted as float
+		try:
+			float(star[c])
+		except ValueError:
+			print(" Error on star %d/%d (%s): '%s' field is not a number" % (i+1, star_num, star['_1'], c))
+			return False
+		# Check if value is NaN
+		if (star[c] != star[c]):
+			print(" Error on star %d/%d (%s): '%s' field is not a number" % (i+1, star_num, star['_1'], c))
+			return False
+
+	return True
+
 
 def calculate_ages(mist, dr2):
 
@@ -182,33 +250,38 @@ def calculate_ages(mist, dr2):
 	zmodel = 10.**mist['log10_isochrone_age_yr']/1.0e6
 
 	MG = absolute_Gmag(dr2['Gmag'], dr2['Plx'])
-	BPRP = dr2['BPmag']-dr2['RPmag']
+	BPRP = dr2['BPmag'] - dr2['RPmag']
 
-	#Write results to TeX file in LaTeX format
-	save_tex = open('ages.tex', 'w')
+	# Arrays for ages
+	ages = []
+	uerr = []
+	lerr = []
 
-	#Write results to normal text file, tab-separated values for
-	# name age +error -error
-	save_txt = open('ages.txt', 'w')
-
-	for i in range(len(dr2)):
+	for i in range(dr2.size):
 
 		# Monte Carlo simulations to calculate age and uncertainties,
 		# accounting for errors in photometry and parallax
 
-		#Turning all data into gaussian distributions
-		_gmag = np.random.normal(dr2['Gmag'][i], dr2['e_Gmag'][i], npts)
-		_plx  = np.random.normal(dr2['Plx'][i], dr2['e_Plx'][i], npts)
-		_MG   = absolute_Gmag(_gmag, _plx)
-		_BP   = np.random.normal(dr2['BPmag'][i], dr2['e_BPmag'][i], npts)
-		_RP   = np.random.normal(dr2['RPmag'][i], dr2['e_RPmag'][i], npts)
-		_BPRP = _BP-_RP
-
-		if np.isnan(_BPRP).any() or np.isnan(_MG).any():
-			print(i, "Error on star", dr2['_1'][i], "(BPRP or MG)")
-			save_tex.write("%s\n" % dr2['_1'][i])
-			save_txt.write("%s\n" % dr2['_1'][i])
+		if not check_star(dr2[i], i, dr2.size):
+			ages.append(0)
+			uerr.append(0)
+			lerr.append(0)
 			continue
+		
+		_gmag = np.random.normal(float(dr2['Gmag'][i]), float(dr2['e_Gmag'][i]), npts)
+		_plx  = np.random.normal(float(dr2['Plx'][i]), float(dr2['e_Plx'][i]), npts)
+
+		if (_plx <= 0).any():
+			print(" Error on star %d/%d (%s): parallax distribution has negative values (errors too large)" % (i+1,dr2.size,dr2['_1'][i]) )
+			ages.append(0)
+			uerr.append(0)
+			lerr.append(0)
+			continue
+
+		_MG   = absolute_Gmag(_gmag, _plx)
+		_BP   = np.random.normal(float(dr2['BPmag'][i]), float(dr2['e_BPmag'][i]), npts)
+		_RP   = np.random.normal(float(dr2['RPmag'][i]), float(dr2['e_RPmag'][i]), npts)
+		_BPRP = _BP - _RP
 
 		# np.random.normal generates a normal distribution based on a median and two errors
 		# with a number of points equal to 'npts', here set to 1e6
@@ -217,9 +290,10 @@ def calculate_ages(mist, dr2):
 		_agemyr = model_2dinterp(_BPRP, _MG, xmodel, ymodel, zmodel)
 
 		if np.isnan(_agemyr).any():
-			printf(i, "Error on star", dr2['_1'][i], "(AGEMYR)")
-			save_tex.write("%s\n" % dr2['_1'][i])
-			save_txt.write("%s\n" % dr2['_1'][i])
+			print(" Error on star %d/%d (%s): could not interpolate to model." % (i+1,dr2.size,dr2['_1'][i]) )
+			ages.append(0)
+			uerr.append(0)
+			lerr.append(0)
 			continue
 
 		# Runs through age distribution values looking for NaN, meaning interpolation
@@ -227,37 +301,50 @@ def calculate_ages(mist, dr2):
 		    
 		# Get median age and errors
 		_agemed  = np.nanpercentile(_agemyr, 50.)
-		_agelerr = np.nanpercentile(_agemyr, 16.)-_agemed
-		_ageuerr = np.nanpercentile(_agemyr, 84.)-_agemed
+		_agelerr = np.nanpercentile(_agemyr, 16.) - _agemed
+		_ageuerr = np.nanpercentile(_agemyr, 84.) - _agemed
 
-		# Write the individual age distributions to file
+		ages.append(_agemed)
+		uerr.append(_ageuerr)
+		lerr.append(_agelerr)
+
+		# Write age distribution data to file
 		f = open('./agedist/'+dr2['_1'][i]+'-agedist.txt', 'w')
 		for j in range(len(_agemyr)):
 			f.write('%.1f\n' % (_agemyr[j]))
 		f.close()
 
-		# Write LaTeX table
-		save_tex.write('%s\n' % (dr2['_1'][i]+' & '+str("{:.2f}".format(_agemed))+'^{'+str("{:+.2f}".format(_ageuerr))+'}_{'+str("{:.2f}".format(_agelerr))+'} \\\\'))
-		save_txt.write('%s\n' % (dr2['_1'][i]+'\t'+str("{:.2f}".format(_agemed))+'\t'+str("{:+.2f}".format(_ageuerr))+'\t'+str("{:.2f}".format(_agelerr)) ) )
-
 		# Make CMD for each individual source for spot-checking purposes
 		camd_age_plot(mist, xdata=[np.nanmedian(_BPRP)], ydata=[np.nanmedian(_MG)], xerr=[np.nanstd(_BPRP)], yerr=[np.nanstd(_MG)], age_array=_agemyr, filename='./figures/'+dr2['_1'][i]+'-camd.jpg')
 
 		# Print progress
-		if (i+1)%2==0:
-			print("{:.1f}".format(100.*(i+1)/len(dr2)),' % complete')
+		print(" Star %d/%d (%s) processed." % (i+1,len(dr2), dr2['_1'][i]))
 
-	save_tex.close()
-	save_txt.close()
+	return ages, uerr, lerr
 
+
+def check_columns(columns):
+	expected_cols = ('_1', 'Plx', 'e_Plx', 'Gmag', 'e_Gmag',
+					'BPmag', 'e_BPmag', 'RPmag', 'e_RPmag')
+	for n in expected_cols:
+		if (n not in columns):
+			print(" Error: star data file has unexpected formatting.")
+			print(" 	-> '%s' data column missing" % n)
+			print(" Check documentation for expected columns in data file.")
+			exit()
 
 
 def main():
 
 	print("\n\n")
 	print(" ====== CMD Age Analysis =======\n")
-	print(" Input filename with star data (data delimiter is semicolon)")
+	print(" Input filename with star data:")
 	filename = input(" Filename = ")
+
+	if not os.path.exists(filename):
+		print(" Error: file '%s' not found" % filename)
+		return
+
 
 	dr2 = np.genfromtxt(filename, 
 						skip_header=0, 
@@ -267,10 +354,26 @@ def main():
 						encoding='utf8', 
 						autostrip=True)
 
+	# Check correct number of column names in star data file.
+	check_columns(dr2.dtype.names)
+
+	#With only one entry in star data file, lenth of array will be zero,
+	# which makes the code fail.
+	# Solve by duplicating entry, and naming the duplicate 'ignore'
+	if (dr2.size < 2):
+		dr2 = np.append(dr2, dr2)
+		dr2[1][0] = 'ignore'
+
 	# Calculating absolute magnitudes, and colour index BPRP (blue - red magnitudes)
 	MG = absolute_Gmag(dr2['Gmag'], dr2['Plx'])
 	BPRP = dr2['BPmag']-dr2['RPmag']
 
+	model_filename = "./MIST_Gaia_vvcrit0.4.iso.cmd"
+	if not os.path.exists(model_filename):
+		print("Error: models file '%s' not found." % model_filename)
+		exit()
+
+	# Extracting MIST models
 	mist = np.genfromtxt('./MIST_Gaia_vvcrit0.4.iso.cmd', skip_header=12, names=True)
 
 	# Making directories
@@ -285,10 +388,26 @@ def main():
 
 	# Plot Inidividual CMDs
 	#camd_age_plot(mist, xdata=BPRP, ydata=MG, xerr=0.1, yerr=0.1, age_array=np.random.normal(100,10,int(1e4)))
-	
-	calculate_ages(mist, dr2)
+	ages, uerr, lerr = calculate_ages(mist, dr2)
 
-	print("end")
+
+	#Write results to TeX file in LaTeX format
+	save_tex = open('ages.tex', 'w')
+	#Write results to normal text file
+	save_txt = open('ages.txt', 'w')
+
+	save_tex.write("%% Star \t Age \t Upper Error \t Lower Error\n")
+	save_txt.write("# Star \t Age \t Upper Error \t Lower Error\n")
+	for i in range(len(ages)):
+		save_tex.write("%s & %.2f ^{ +%.2f }_{ -%.2f } \\\\ \n" % (dr2['_1'][i], ages[i], uerr[i], lerr[i]))
+		#save_tex.write('%s\n' % (dr2['_1'][i]+' & '+str("{:.2f}".format(ages[i]))+'^{'+str("{:+.2f}".format(uerr[i]))+'}_{'+str("{:.2f}".format(lerr[i]))+'} \\\\'))
+		save_txt.write("%s \t %.2f \t +%.2f \t -%.2f \n" % (dr2['_1'][i], ages[i], uerr[i], lerr[i]))
+		#save_txt.write('%s\n' % (dr2['_1'][i]+'\t'+str("{:.2f}".format(ages[i]))+'\t'+str("{:+.2f}".format(uerr[i]))+'\t'+str("{:.2f}".format(lerr[i])) ) )
+	save_tex.close()
+	save_txt.close()
+	
+
+	print("Done!")
 
 
 
