@@ -8,6 +8,7 @@ import hciplot
 import math
 import pandas as pd
 import vip_hci as vip
+import os
 
 
 from mpl_toolkits.mplot3d.axes3d import get_test_data
@@ -89,7 +90,7 @@ from matplotlib import cm
 						If the main lobe has a very high SNR, it 
 						may happen that the tertiary lobe is above 
 						the threshold and thus detected as a companion
-						whereas it is an artefact.
+						whilst being an artefact.
 
 	owa					: float [lambda/D], optional
 						External limit of the data in the images (radius)
@@ -181,7 +182,7 @@ class Maps:
 		if not isinstance(self.snr_norm, np.ndarray):
 			if verbose:
 				print(" No normalised SNR map provided. Non-normalised one will be used instead.")
-			self.snr_norm = np.copy(snr_map)
+			self.snr_norm = np.copy(self.snr_map)
 			self.snrnorm_flag = False
 
 		# Checking Flux maps
@@ -238,6 +239,7 @@ class Data:
 		# Looks for zero values from edge of flux_norm_stddev map towards the middle.
 		# Defines owa as the distance from the first non-zero value to the centre
 		if (not self.owa) or (isinstance(self.owa, (float,int)) and self.owa <= 0):
+			"""
 			mid = int((self.img_size-1)/2)
 			slab = flux_ns[:,mid]
 			mid2 = math.ceil(1 + slab.shape[0] / 2)
@@ -247,6 +249,7 @@ class Data:
 				if (arr != 0):
 					ind = i+1
 					break
+			"""
 			self.owa = (self.img_size/2 - 1) / (2*self.oversampling)
 			if verbose:
 				print(" No input owa set or invalid value. Using %.3f lambda/D." % self.owa)
@@ -288,89 +291,174 @@ class Data:
 
 
 
+class idl:
 
-# ECLAT Function from IDL
-# Shifts x,y values in 2D array by rows/2 and cols/2, respectively.
-def IDL_Eclat(img):
-	rows = img.shape[0]
-	cols = img.shape[1]
-	new_img = np.roll(img, int(rows/2), axis=0)
-	new_img = np.roll(new_img, int(cols/2), axis=1)
-	return new_img
+	def polaire2(rt, width = None, oc = 0.0,
+				center_x = None, center_y = None,
+				even_px = False, leq = False,
+				verbose = True):
 
+		#---------------------
+		# 	Input Checking
+		#---------------------
 
+		# Checking RT:
+		if not rt:
+			print("Error: No input telescope radius!")
+			return
 
-"""
- Based on  distc.pro function from IDL
- Original Author: L. Mugnier.
- Creates square matrix of size 'n*m'
- where the values are proportional to their distance to the origin.
- INPUTS:
-	n 	:(int), rows
-	m 	:(int), columns, optional
-	cx 	:(int), x-center of matrix, optional
-	cy 	:(int), y-center of matrix, optional
-"""
-def IDL_Distc(n, cols=None, cx=None, cy=None):
+		if not isinstance(rt, (float,int)):
+			print("Telescope radius must be a float or int")
+			return
 
-	n = int(n)
-	m = cols
+		if (rt <= 0):
+			print("Telescope radius must be greater than zero")
+			return
 
-	# Without columns, make the matrix square
-	if not m:
-		m = n
+		# Checking OC:
+		if not oc:
+			oc = 0.0
 
-	# Initialize the return array
-	arr = np.ones((n,n))
+		if (oc < 0) or (oc > 1):
+			print("Occultation must be in range [0,1]. Will be set to 0")
+			oc = 0.0
 
-	x = np.arange(n)
-	
-	# Without center coordinates:
-	if (not cx) and (not cy):
-		for i in range(n):
-			if x[i] >= (n-x)[i]:
-				x[i] = (n-x)[i]
-		x = x**2
+		# Checking Width
+		if not isinstance(width, (float,int)) or ( isinstance(width, (float,int)) and (width < 0) ):
+			if even_px:
+				width = 2 * idl.round(rt)
+			else:
+				width = 2 * int(rt) + 1
 
-		i = 0
-		while(i < m/2):
-			y = np.sqrt(x + i**2)
-			arr[i] = y
-			if (i != 0):
-				arr[m-i] = y
-			i += 1
+		# Definiton of center x,y
+		if not center_x:
+			center_x = float( (width-1.0)/2 )
 
+		if not center_y:
+			center_y = float( (width-1.0)/2 )
 
-	# If at least one center coordinate is input:
-	else:
-		if not cx:
-			cx = n/2.
-		if not cy:
-			cy = m/2.
-		x = (x - cx)**2
-
-		i = 0
-		while (i < m):
-			arr[i] = np.sqrt(x + (i - cy)**2)
-			i += 1
-
-	return arr
+		# Verbose
+		if verbose:
+			print(" Width = ",width)
+			print(" Center (x,y) = ", center_x, center_y)
 
 
+		# Calculating Angles Rho and Phi
+		width = int(width)
 
-# Implementation of WHERE function from IDL
-# Original Author: Ralf Farkas (github.com/r4lv)
-# Source: github.com/vortex-exoplanet/VIP/blob/master/vip_hci/andromeda/utils.py
-def IDL_Where(array_expression):
-	res = np.array([i for i, e in enumerate(array_expression.flatten()) if e])
-	return res
+		x = np.arange(width*width, dtype=float)
+		x = x.reshape((width,width))
+		x = x % width
+		# These 3 lines are equivalent to IDL:
+		#	x = float( dindgen(widht,width) mod width )
 
-# Implementation of ROUND function from IDL
-# Original Author: Ralf Farkas (github.com/r4lv)
-# Source: github.com/vortex-exoplanet/VIP/blob/master/vip_hci/andromeda/utils.py
-def IDL_Round(x):
-	val = np.trunc(x + np.copysign(0.5, x))
-	return int(val)
+		y = np.transpose(x)
+
+		x = x - center_x
+		y = y - center_y
+
+		rho = np.sqrt(x**2 + y**2)/float(rt)
+		phi = np.arctan2(y, x + (rho==0) )
+		# Here (rho==0) returns a matrix of zeros (False) where the element of rho is not ==0
+		# and True (1) is the element is ==0
+		# Hence, x + (rho == 0), will add 1 to the element of X in which the corresponding
+		# element in rho is ==0. 
+
+		# Calculating Mask
+		if leq:
+			mask = ( (rho <= 1)*(rho >= oc) ).astype(int)
+		else:
+			mask = ( (rho < 1)*(rho >= oc) ).astype(int)
+
+			# Get matrix (rho <= 1) (array of bools)
+			# Get matrix (rho >= oc) (array of bools)
+			# Multiply both. (Note: True*True = True; False*True = False)
+			# Convert from bool to integer array using numpy.astype
+
+		return rho, phi, mask
+
+	# ECLAT Function from IDL
+	# Shifts x,y values in 2D array by rows/2 and cols/2, respectively.
+	def eclat(img):
+		rows = img.shape[0]
+		cols = img.shape[1]
+		new_img = np.roll(img, int(rows/2), axis=0)
+		new_img = np.roll(new_img, int(cols/2), axis=1)
+		return new_img
+
+
+
+	"""
+	 Based on  distc.pro function from IDL
+	 Original Author: L. Mugnier.
+	 Creates square matrix of size 'n*m'
+	 where the values are proportional to their distance to the origin.
+	 INPUTS:
+		n 	:(int), rows
+		m 	:(int), columns, optional
+		cx 	:(int), x-center of matrix, optional
+		cy 	:(int), y-center of matrix, optional
+	"""
+	def distc(n, cols=None, cx=None, cy=None):
+
+		n = int(n)
+		m = cols
+
+		# Without columns, make the matrix square
+		if not m:
+			m = n
+
+		# Initialize the return array
+		arr = np.ones((n,n))
+
+		x = np.arange(n)
+		
+		# Without center coordinates:
+		if (not cx) and (not cy):
+			for i in range(n):
+				if x[i] >= (n-x)[i]:
+					x[i] = (n-x)[i]
+			x = x**2
+
+			i = 0
+			while(i < m/2):
+				y = np.sqrt(x + i**2)
+				arr[i] = y
+				if (i != 0):
+					arr[m-i] = y
+				i += 1
+
+
+		# If at least one center coordinate is input:
+		else:
+			if not cx:
+				cx = n/2.
+			if not cy:
+				cy = m/2.
+			x = (x - cx)**2
+
+			i = 0
+			while (i < m):
+				arr[i] = np.sqrt(x + (i - cy)**2)
+				i += 1
+
+		return arr
+
+
+
+	# Implementation of WHERE function from IDL
+	# Original Author: Ralf Farkas (github.com/r4lv)
+	# Source: github.com/vortex-exoplanet/VIP/blob/master/vip_hci/andromeda/utils.py
+	def where(array_expression):
+		res = np.array([i for i, e in enumerate(array_expression.flatten()) if e])
+		return res
+
+	# Implementation of ROUND function from IDL
+	# Original Author: Ralf Farkas (github.com/r4lv)
+	# Source: github.com/vortex-exoplanet/VIP/blob/master/vip_hci/andromeda/utils.py
+	def round(x):
+		val = np.trunc(x + np.copysign(0.5, x))
+		return int(val)
 
 
 # This class performs a Gaussian 2D Fit on an input image
@@ -600,89 +688,7 @@ def plot_3d_window_gaussian(sz, gauss, window, filename=None):
 
 	Note: 'useful_points' not implemented.
 	"""
-def IDL_Polaire2(rt, width = None, oc = 0.0,
-				center_x = None, center_y = None,
-				even_px = False, leq = False,
-				verbose = True):
 
-	#---------------------
-	# 	Input Checking
-	#---------------------
-
-	# Checking RT:
-	if not rt:
-		print("Error: No input telescope radius!")
-		return
-
-	if not isinstance(rt, (float,int)):
-		print("Telescope radius must be a float or int")
-		return
-
-	if (rt <= 0):
-		print("Telescope radius must be greater than zero")
-		return
-
-	# Checking OC:
-	if not oc:
-		oc = 0.0
-
-	if (oc < 0) or (oc > 1):
-		print("Occultation must be in range [0,1]. Will be set to 0")
-		oc = 0.0
-
-	# Checking Width
-	if not isinstance(width, (float,int)) or ( isinstance(width, (float,int)) and (width < 0) ):
-		if even_px:
-			width = 2 * IDL_Round(rt)
-		else:
-			width = 2 * int(rt) + 1
-
-	# Definiton of center x,y
-	if not center_x:
-		center_x = float( (width-1.0)/2 )
-
-	if not center_y:
-		center_y = float( (width-1.0)/2 )
-
-	# Verbose
-	if verbose:
-		print(" Width = ",width)
-		print(" Center (x,y) = ", center_x, center_y)
-
-
-	# Calculating Angles Rho and Phi
-	width = int(width)
-
-	x = np.arange(width*width, dtype=float)
-	x = x.reshape((width,width))
-	x = x % width
-	# These 3 lines are equivalent to IDL:
-	#	x = float( dindgen(widht,width) mod width )
-
-	y = np.transpose(x)
-
-	x = x - center_x
-	y = y - center_y
-
-	rho = np.sqrt(x**2 + y**2)/float(rt)
-	phi = np.arctan2(y, x + (rho==0) )
-	# Here (rho==0) returns a matrix of zeros (False) where the element of rho is not ==0
-	# and True (1) is the element is ==0
-	# Hence, x + (rho == 0), will add 1 to the element of X in which the corresponding
-	# element in rho is ==0. 
-
-	# Calculating Mask
-	if leq:
-		mask = ( (rho <= 1)*(rho >= oc) ).astype(int)
-	else:
-		mask = ( (rho < 1)*(rho >= oc) ).astype(int)
-
-		# Get matrix (rho <= 1) (array of bools)
-		# Get matrix (rho >= oc) (array of bools)
-		# Multiply both. (Note: True*True = True; False*True = False)
-		# Convert from bool to integer array using numpy.astype
-
-	return rho, phi, mask
 
 
 
@@ -774,7 +780,7 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 	gauss_params = Gauss_params(data.res, data.sz, data.obs_flag)
 
 	#-Weight map for SNR 2D-Gaussian fit:
-	sz_arr = IDL_Eclat( IDL_Distc(sz) )
+	sz_arr = idl.eclat( idl.distc(sz) )
 	weight_snr = np.empty((sz,sz))
 
 	weight_snr = 1 - sz_arr * (2./(sz-1))
@@ -790,9 +796,11 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 
 	# Redefining maps to avoid overwriting input images
 
-	img = np.copy(snr_map)
-	norm = np.copy(snr_norm)
-	flux = np.copy(flux_map)
+	img = np.copy(maps.snr_map)
+	norm = np.copy(maps.snr_norm)
+	flux = np.copy(maps.flux_map)
+	stddev_flux_norm = np.copy(maps.flux_norm_stddev)
+
 
 	# Setting all negative image elements to zero for better fitting
 
@@ -837,11 +845,11 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 
 	# ---- All Detections Loop ----
 	#Loops over every signal greater than threshold
-	for r in range(0, Pmax-1):
+	for r in range(0, Pmax):
 
 		#Warnings
-		if r == Pmax-1:
-			print("WARNING: Too many companions found (", r, "). Increase Threshold!!")
+		if r == Pmax:
+			print("WARNING: Too many companions found (", r+1, "). Increase Threshold!!")
 			return
 
 		if np.amax(norm) >= threshold:
@@ -851,7 +859,7 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 
 			# Calculating position indices of signal
 			print("\n ---Signal above threshold found:", r+1)
-			index_snr = IDL_Where(norm == np.amax(norm))
+			index_snr = idl.where(norm == np.amax(norm))
 			index_x = index_snr % size_snr
 			index_y = np.divide(index_snr, size_snr)
 			i_ind = index_x[0]
@@ -859,7 +867,7 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 
 			# Calculating Mask
 			rt = math.ceil(res)
-			polaire_outputs = IDL_Polaire2(rt, width=size_snr, center_x=i_ind, center_y=j_ind)
+			polaire_outputs = idl.polaire2(rt, width=size_snr, center_x=i_ind, center_y=j_ind)
 			mask = polaire_outputs[2]
 
 			# Get windows by cropping images with mask
@@ -878,8 +886,8 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 
 			# Test on the normal snr map
 			ratio = snr_stddev[int(i_ind),int(j_ind)]
-			ind = IDL_Where(window_snr > 0)
-			ind2 = IDL_Where(window_snr >= threshold*ratio)
+			ind = idl.where(window_snr > 0)
+			ind2 = idl.where(window_snr >= threshold*ratio)
 
 			# Number of pixels above threshold
 			nb_pixels.append(ind2.shape[0])
@@ -1018,7 +1026,7 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 				flag_err_pos[r] = 2
 
 			# Erasing companion to find the next one
-			polaire_outputs = IDL_Polaire2(math.ceil(res), width=size_snr, center_x=x_0[r], center_y=y_0[r])
+			polaire_outputs = idl.polaire2(math.ceil(res), width=size_snr, center_x=x_0[r], center_y=y_0[r])
 			mask_erase = polaire_outputs[2]
 			
 			norm *= (1 - mask_erase)
@@ -1057,21 +1065,21 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 					# No 'constant' return value from VIP gauss fit
 
 					flag_err_flux[r] = 0
-					flux_err[r] = 3.0*window_stdev[ IDL_Round(ax_0[r]) ][ IDL_Round(ay_0[r]) ]
+					flux_err[r] = 3.0*window_stdev[ idl.round(ax_0[r]) ][ idl.round(ay_0[r]) ]
 
 				else:
 					print(" 2D Gaussian fit on flux pattern did not work.")
 					print(" Using rounded value instead.")
-					flux_est[r] = window_flux[ IDL_Round(ax_0[r]) ][ IDL_Round(ay_0[r]) ]
+					flux_est[r] = window_flux[ idl.round(ax_0[r]) ][ idl.round(ay_0[r]) ]
 					flag_err_flux[r] = 1
-					flux_err[r] = 3.0*window_stdev[ IDL_Round(ax_0[r]) ][ IDL_Round(ay_0[r]) ]
+					flux_err[r] = 3.0*window_stdev[ idl.round(ax_0[r]) ][ idl.round(ay_0[r]) ]
 
 			else:
 				print(" No 2D Gaussian fit is performed in the flux map.")
 				print(" Using rounded value instead.")
-				flux_est[r] = window_flux[ IDL_Round(ax_0[r]) ][ IDL_Round(ay_0[r]) ]
+				flux_est[r] = window_flux[ idl.round(ax_0[r]) ][ idl.round(ay_0[r]) ]
 				flag_err_flux[r] = 2
-				flux_err[r] = 3.0*window_stdev[ IDL_Round(ax_0[r]) ][ IDL_Round(ay_0[r]) ]
+				flux_err[r] = 3.0*window_stdev[ idl.round(ax_0[r]) ][ idl.round(ay_0[r]) ]
 
 		else:
 			print("\n TOTAL NUMBER OF COMPANIONS FOUND: ", r, "\n")
@@ -1121,7 +1129,7 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 	k_patch = mpatches.Patch( color='c', label='Too close to other signal')
 	y_patch = mpatches.Patch( color='y', label='Too close to edge')
 	r_patch = mpatches.Patch( color='r', label='Bad Fit')
-	w_patch = mpatches.Patch( color='y', label='Low SNR')
+	w_patch = mpatches.Patch( color='k', label='Low SNR')
 
 	plt.legend(handles=[g_patch, k_patch, y_patch, r_patch, w_patch], 
 				loc = 'upper center',
@@ -1265,99 +1273,144 @@ def detection_andromeda (snr_map, snr_norm = None, snr_stddev = None,
 
 
 
-
-
-# TYC 8979
-"""
-snr_map = vip.fits.fits.open_fits("test_tyc8979/snr_raw_TYC8979.fits")
-snr_norm = vip.fits.fits.open_fits("test_tyc8979/snr_norm_TYC8979.fits")
-flux_map = vip.fits.fits.open_fits("test_tyc8979/contrast_TYC8979.fits")
-stddev_flux_map = vip.fits.fits.open_fits("test_tyc8979/stddevcontrast_TYC8979.fits")
-stddev_flux_norm = vip.fits.fits.open_fits("test_tyc8979/stddevcontrast_TYC8979_Norm18.fits")
-"""
-
-# HIP 4067
-"""
-snr_map = vip.fits.fits.open_fits("andr_hip4067/ANDR_snrmap_HIP_4067.fits")
-snr_norm = vip.fits.fits.open_fits("andr_hip4067/ANDR_snrnorm_HIP_4067.fits")
-flux_map = vip.fits.fits.open_fits("ANDR_contrast_HIP_4067.fits")
-stddev_flux_map = vip.fits.fits.open_fits("ANDR_contrast_HIP_4067.fits")
-stddev_flux_norm = vip.fits.fits.open_fits("ANDR_contrast_HIP_4067.fits")
-"""
-
-# STIM (HR 8799)
-"""
-snr_map = vip.fits.fits.open_fits("STIM_RDI_2.fits")
-snr_norm = vip.fits.fits.open_fits("STIM_RDI_2.fits")
-flux_map = vip.fits.fits.open_fits("STIM_RDI_2.fits")
-stddev_flux_map = vip.fits.fits.open_fits("STIM_RDI_2.fits")
-stddev_flux_norm = vip.fits.fits.open_fits("STIM_RDI_2.fits")
-"""
-
-# HR 8799
-
-snr_map = vip.fits.fits.open_fits("andr_hr8799/ANDR_snrmap_HR_8799.fits")
-snr_norm = vip.fits.fits.open_fits("andr_hr8799/ANDR_snrnorm_HR_8799.fits")
-flux_map = vip.fits.fits.open_fits("andr_hr8799/ANDR_contrast_HR_8799.fits")
-stddev_flux_map = vip.fits.fits.open_fits("andr_hr8799/ANDR_contrast_HR_8799.fits")
-stddev_flux_norm = vip.fits.fits.open_fits("andr_hr8799/ANDR_contrast_HR_8799.fits")
-
-
-# HIP 23155
-"""
-snr_map = vip.fits.fits.open_fits("andr_hip23155/ANDR_snrmap_hip_23155.fits")
-snr_norm = vip.fits.fits.open_fits("andr_hip23155/ANDR_snrnorm_hip_23155.fits")
-flux_map = vip.fits.fits.open_fits("andr_hip23155/ANDR_contrast_hip_23155.fits")
-stddev_flux_map = vip.fits.fits.open_fits("andr_hip23155/ANDR_contrast_hip_23155.fits")
-stddev_flux_norm = vip.fits.fits.open_fits("andr_hip23155/ANDR_contrast_hip_23155.fits")
-"""
-
-# Pixscale for L-band
-"""
-band_L = 1600E-9	# m
-diam_tel = 8.2	# m
-pixscale = 13.2 # mas/pix
-pxscale_nyq = 1/2 * (180*3600*1E3 / np.pi) * (band_L / diam_tel)
-oversampling = pxscale_nyq / pixscale
-"""
-
-# Pixscale for K-band
-Kp_wavelength = 2.124E-6
-pixscale_keck = 0.00953 
-diam_tel = 10
-pixscale = pixscale_keck * 1E3
-pixscale_nyq = 1/2 * (180*3600*1E3 / np.pi) * (Kp_wavelength / diam_tel)
-oversampling = pixscale_nyq / pixscale
-print(" Oversampling = ",oversampling)
+def flip(data):
+	data = np.flip(data, axis=0)
+	return data
 
 
 
-# ---Threshold
-# For Naco/VLT ~= 5
-# For Nirc2/Keck ~= 10
-threshold = 10
+def main():
 
-# ---Flag for constraints
-# 0 - NaCo-VLT
-# 1 - NIRC2-Keck
-# 2 - STIM on NIRC2-Keck
-obs_flag = 1
+	print("\n === Andromeda Detection Algorithm ===")
 
+	# Ask for image type to analyse
+	option = 0
+	while(True):
+		print("\n Analyse...")
+		print(" 1) Andromeda outputs")
+		print(" 2) A specific image")
+		option_str = input("")
+		try:
+			option = int(option_str)
+		except ValueError:
+			print(" Error: invalid option")
+		if (option == 1 or option == 2):
+			break
 
+	# Ask for images directory
+	path = ''
+	starname = ''
+	starpath = ''
 
+	snrmap_path = ''
+	snrnorm_path = ''
 
+	while(not os.path.isfile(starpath) and option == 2):
+		starpath = input(" Input image directory: ")
+		if (not os.path.isfile(starpath)):
+			print(" File '%s' not found" % starpath)
 
-#plt.imshow(snr_norm)
-#plt.title("SNR Map")
-#plt.show()
+	while(not os.path.isfile(starpath) and option == 1):
+		path = input(" Input folder name where data is located (example: 'hr_8799' or '.\\'): ")
+		if(path[-1] != '\\') or (path[-1] != '/'):
+			path += '\\'
+		starname = input(" Input star name: ")
+		
+		#Check that SNR maps exist
+		snrmap_path = path + "andr_snrmap_" + starname + ".fits"
+		snrnorm_path = path + "andr_snrnorm_" + starname + ".fits"
 
+		if(not os.path.isdir(path)):
+			print(" Error: path '%s' does not exist" % path)
+			continue
 
-detection_andromeda (snr_map, snr_norm = snr_norm, snr_stddev = None,
+		if (not os.path.isfile(snrmap_path) and not os.path.isfile(snrnorm_path)):
+			print(" Error: SNR and SNR-norm maps not found:")
+			print(" ->", snrmap_path)
+			print(" ->", snrnorm_path)
+			continue
+
+		break
+
+	snr_map = None
+	snr_norm = None
+	flux_map = None
+	stddev_flux_map = None
+	stddev_flux_norm = None
+
+	if (option == 1):
+		flux_map_path = path + "andr_contrast_" + starname + ".fits"
+		stddev_flux_map_path = path + "andr_contrast_stddev_" + starname + ".fits"
+		stddev_flux_norm_path = path + "andr_contrastnorm_stddev_" + starname + ".fits"
+
+		if (os.path.isfile(snrmap_path)):
+			snr_map = np.flip(vip.fits.fits.open_fits(snrmap_path), axis=0)
+
+		if (os.path.isfile(snrnorm_path)):
+			snr_norm = np.flip(vip.fits.fits.open_fits(snrnorm_path), axis=0)
+
+		if (os.path.isfile(flux_map_path)):
+			flux_map = np.flip(vip.fits.fits.open_fits(flux_map_path), axis=0)
+
+		if (os.path.isfile(stddev_flux_map_path)):
+			stddev_flux_map = np.flip(vip.fits.fits.open_fits(stddev_flux_map_path), axis=0)
+
+		if (os.path.isfile(stddev_flux_norm_path)):
+			stddev_flux_norm = np.flip(vip.fits.fits.open_fits(stddev_flux_norm_path), axis=0)
+
+		if (not os.path.isfile(snrmap_path)):
+			snr_map = np.copy(snr_norm)
+
+	elif (option == 2):
+		snr_map = np.flip(vip.fits.fits.open_fits(starpath), axis=0)
+		snr_norm = np.copy(snr_map)
+		flux_map = np.ones(snr_map.shape)
+		stddev_flux_map = np.ones(snr_map.shape)
+		stddev_flux_norm = np.ones(snr_map.shape)
+
+	# Pixscale for K-band
+	Kp_wavelength = 2.124E-6
+	pixscale_keck = 0.00953
+	diam_tel = 10
+	pixscale = pixscale_keck * 1E3
+	pixscale_nyq = 1/2 * (180*3600*1E3 / np.pi) * (Kp_wavelength / diam_tel)
+	oversampling = pixscale_nyq / pixscale
+	print(" Oversampling = ",oversampling)
+
+	# ---Threshold
+	# For Naco/VLT ~= 5
+	# For Nirc2/Keck ~= 10
+	threshold = float(0.0)
+	while(True):
+		th = input(" Input threshold: ")
+		try:
+			th = float(th)
+		except ValueError:
+			print(" Error: threshold must be int or float")
+			continue
+
+		if (th <= 0):
+			print(" Error: threshold must be greater than zero")
+			continue
+		threshold = th
+		break
+
+	# ---Flag for constraints
+	# 0 - NaCo-VLT
+	# 1 - NIRC2-Keck
+	# 2 - STIM on NIRC2-Keck
+	obs_flag = 1
+
+	detection_andromeda (snr_map, snr_norm = snr_norm, snr_stddev = None,
 			flux_map = flux_map, flux_stddev = stddev_flux_map, flux_norm_stddev = stddev_flux_norm,
 			threshold = threshold, size_subwindow = None,
 			pixscale = pixscale, oversampling = oversampling,
 			max_lobe_dist = None, owa = None, iwa = None,
 			psf = None, img_int_time = None, psf_int_time = None,
-			tnd = None, detection_files = None, nb_detections = None,
-			verbose = True, obs_flag = obs_flag)
+			tnd = None, verbose = True, obs_flag = obs_flag, save_plots = False)
 
+
+
+if __name__ == '__main__':
+	main()
+	exit()
