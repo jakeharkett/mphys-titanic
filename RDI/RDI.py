@@ -1,4 +1,4 @@
-"""
+cd"""
             RDI.py
             Author: Brendan Wilby
             Created 26/11/2019
@@ -7,18 +7,25 @@
             If a reference cube is provided, this script will perform RDI. If not it will default to ADI.
 
             USAGE:
-                python RDI.py [science cube] [refcube=None]
+                python RDI.py [science_cube] [refcube=None]
+
+                science_cube is the .fits file (a cube) composed of images that are to be processed
+                refcube is another .fits cube that contains images to be used as reference. If this isn't specified, the script performs ADI instead
 """
 
 
 import vip_hci as vip
 from astropy.io import fits
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 import sys
+
+
 
 HEADER_NAME_PARANG = "PARANG"
 PSF_SOURCE = "psf.fits"
-PSF_XY = [95, 111]
+PSF_XY = (95, 111)
 
 """
 =================================================================================================
@@ -26,6 +33,7 @@ PSF_XY = [95, 111]
 =================================================================================================
 """
 
+# Read parallactic angles from the headers of all files specified in text file "target_name_filesnames.txt"
 def ReadAngles(target_name, save=False):
     file_names_path = target_name + "_filenames.txt"
     try:
@@ -91,7 +99,7 @@ if __name__ == "__main__":
 
         try:
             hdulist = fits.open(ref_cube_path, ignore_missing_end=True)
-            ref_cube = hdulist[0].data
+            ref_cube = hdulist[0].data[:, 0:1023, 0:1023]
             print("========================================================================================================")
             print("Loaded reference cube %s of shape: (%d, %d, %d)" %(ref_cube_path, ref_cube.shape[0], ref_cube.shape[1], ref_cube.shape[2]))
             print("========================================================================================================")
@@ -100,13 +108,9 @@ if __name__ == "__main__":
             sys.exit()
 
     # Read in angle list
-    angle_list = ReadAngles(target_name, True)
+    angle_list = ReadAngles(target_name, False)
 
-    """
-        WHAT ARE THESE??????????????????????
-    """
-    inner_rad_rdi = 0.1         # Guessed value
-    PCA_comps = 1               # how to find this?
+    inner_rad_rdi = 0.2         # Guessed value
 
     # Load in the PSF fits file
     try:
@@ -127,15 +131,19 @@ if __name__ == "__main__":
     # Compute the central mask size in pixels
     mask_center_pixels = inner_rad_rdi * fwhm
 
-    # Perform RDI/ADI 
-    output_cube = vip.pca.pca_fullfr.pca(
-        cube=science_cube, angle_list=angle_list, cube_ref=ref_cube,
-        ncomp=1, svd_mode="lapack", scaling="spat-mean",
-        mask_center_px=mask_center_pixels, source_xy=(PSF_SOURCE[0], PSF_SOURCE[1]),
-        fwhm=fwhm, full_output=False, verbose=True)
+    # Compute optimal principal components
+    
+    svd_decomposer = vip.pca.SVDecomposer(ref_cube)
+    pca_comps = int(svd_decomposer.cevr_to_ncomp(0.9))
+
+    print("Number of PCA components: %d" %pca_comps)
+    
+    #pcs, recon, residuals_cube, residuals_cube_, frame = vip.pca.pca_fullfr.pca(cube=science_cube, angle_list=angle_list, svd_mode="lapack", scaling="spat-mean", mask_center_px=mask_center_pixels,fwhm=fwhm, full_output=True, verbose=True)
+    
+    output_cube = vip.pca.pca_fullfr.pca(cube=science_cube, angle_list=angle_list, cube_ref=ref_cube, ncomp=pca_comps, svd_mode="lapack", scaling="spat-mean", mask_center_px=mask_center_pixels, source_xy=(PSF_XY[0], PSF_XY[1]),fwhm=fwhm, full_output=False, verbose=True)
 
     # Save final cube to target_RDI.fits
     output_filename = target_name + "_RDI.fits"
     hdu_new = fits.PrimaryHDU(output_cube)
     hdu_new.writeto(output_filename, overwrite=True)
-    print("Finished writing to output/%s." %output_filename)
+    print("Finished writing to %s." %output_filename)

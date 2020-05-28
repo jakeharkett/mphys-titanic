@@ -3,15 +3,25 @@
 
 PROJECT SCRIPT 12
 
-Script last updated 9/10/19
-this script works for VIP 0.9.11 in Python3 environment (current version on analysis)
+Script last updated 21/01/2020
+Works for VIP 0.9.11 in Python3 environment (current version on analysis)
+
+For any help, contact:
+	Jorge Fernández
+	MPhys student with Sasha, 2019/2020
+	jorgefz.fernandez@gmail.com
 
 **************************************INSTRUCTIONS**********************************
 
+Place script on the folder where the science images are.
+Run with python.
 Enter the name of the star to run the script, e.g. HIP_99542. 
-Put this folder in the epoch file. 
 
-Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when running this script (avaliable in DangerZone)
+
+Ignore this for the moment:
+	--Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when running this script (avaliable in DangerZone)
+
+
 
 **************************************UPDATES**************************************
 
@@ -71,7 +81,13 @@ Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when runnin
 	2. Disable Planet subtraction (there should a bug in matplotlib)
 
 
-----
+----------------------------------------
+
+DEVELOPMENT CONTINUED BY JORGE FERNANDEZ
+
+Contact: jorgefz.fernandez@gmail.com
+
+
 02/10/19
 	1. Porting to Python3
 		Changed 'print' to 'print()'
@@ -124,6 +140,16 @@ Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when runnin
 	Implemented STIM map using residual cube from Annular PCA
 	Implemented STIm map using residual cube from LLSG
 
+20/01/2020
+	Updated Andromeda Oversampling Factor
+
+21/01/2020
+	Fixed Contrast Curves with James Davies' work.
+
+23/03/2020
+	Reworked Recentering function
+	Added more recentering algorithms
+
 		
 		
 		
@@ -144,9 +170,15 @@ STUCTURE
 
 	1. Packages
 	
-	2. Input variables
+	2. Global variables
 	
 	3. Functions
+
+	4. Main Functions
+
+	5. Image Processing
+
+
 """ 
 
 
@@ -187,19 +219,22 @@ End of package imports
 
 
 """
-============================	INPUT VARIABLES		=================================
+============================	GLOBAL VARIABLES		=================================
 """
 psf_xy = [95,111]			#Centre of psf.
 reference_xy = [0.1, 0.1]	#Reference bright point defined as a decimal so it loops through the decimal check.
 star_xy = [0.1, 0.1] 		#Centre of the star co-ordinates, defined as a decimal so it loops through the decimal check.
-averageflux = 0				#Initialises the background flux.				#Just a range of flux's for the first guess algorithm .
-flvlup = 15000
-flvldown = 1000				#to loop over.
+
+pxscale_keck = 0.00953 		#Pixel scale for keck 2 [arcsec/pixel]
+
+
+#Initialises the background flux.
+#Just a range of flux's for the first guess algorithm .
+averageflux = 0
 
 #Initialises the loop counter, loop counter is used to prevent error warning on first trial
 #when looping through integer check functions.
 Loop_count = 0				
-pxscale_keck = 0.00953 		#Pixel scale for keck 2.
 seperation = 60 			#Radial seperation between synthetic planets in terms of pixels.
 starphot = 0				#Initialises the Starphot parametre.
 sigma = 5					#Sets the value of sigma for the contrast curves.
@@ -242,37 +277,40 @@ coadds and the integration time from the headers. The function then uses these
 values to calculate the parametre starphot the flux from the images in the cube.
 """
 
-def StarphotCalculation(Number_images, psf_xy, starphot):
-			
+def StarphotCalculation(Number_images, psf, fwhm):
+	
+	int_time_cube = 0
+	coadd_cube = 0
 	for i in range(0, Number_images):	
 		hdulist = fits.open(file_names[i], ignore_missing_end = True, verbose = False)
 			#Creates list of open files
-		Coadd_cube = hdulist[0].header['COADDS']
+		coadd_cube += hdulist[0].header['COADDS']
 			#Reads the number of coadds from the first fits file
-		int_time_cube = hdulist[0].header['ITIME']
+		int_time_cube += hdulist[0].header['ITIME']
 			#Reads the integration time for each coadd from the first fits file
-	
-	hdulist2 = fits.open(initialpsf, ignore_missing_end = True, verbose = False)
+
+	hdulist2 = fits.open('psf.fits', ignore_missing_end = True, verbose = False)
 	
 	int_time_psf = hdulist2[0].header['ITIME']
-		#Reads the integration time for each coadd from the psf fits file
-	Coadd_psf = hdulist2[0].header['COADDS']
+		#Reads the integration time per coadd from the psf fits file
+	coadd_psf = hdulist2[0].header['COADDS']
 		#Reads the number of coadds from the psf fits file
 	
-	ycord = np.full((Number_images), psf_xy[1], dtype=int)
-	xcord = np.full((Number_images), psf_xy[0], dtype=int)
+	ycord = np.full((Number_images), psf.shape[1], dtype=int)
+	xcord = np.full((Number_images), psf.shape[0], dtype=int)
 	
 	flux = vip.metrics.contrcurve.aperture_flux(
-			psf, ycord, xcord, fwhm, ap_factor=1,
-			mean=False, verbose=False
-			)
-		#Returns the sum of pixel values in a circular aperture centered on the input coordinates
+			psf, ycord, xcord, fwhm, verbose = False)
+	#Returns the sum of pixel values in a circular aperture centered on the input coordinates
 	
 	psfflux = flux[1]
-		#Get second member of 'flux'. Why??
 		
-	starphot = psfflux * ((int_time_cube * Coadd_cube)/(int_time_psf * Coadd_psf))
+	starphot = psfflux * ((int_time_cube * coadd_cube)/(int_time_psf * coadd_psf))
 	
+	if (starphot != starphot):
+		print(" Error: starphot is NaN")
+		exit()
+
 	return starphot
 
 
@@ -511,51 +549,50 @@ and the PCA data on the same graph and saves it to a file
 Note: This function is terribly inefficient, could be much 
 better looped over but haven't had the time to do so.
 """
-def Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sigma,name_input):
+def Contrastcurvedata(contrast_curve, pxscale_keck, sigma, name_input, algo):
 
-	#Saves the PCA,ADI and LLSG curve outputs
-	np.savetxt('new_PCA_{star_name}_curve_outputs'.format(star_name=name_input),PCA_contrast_curve)
-	np.savetxt('new_LLSG_{star_name}_curve_outputs'.format(star_name=name_input),LLSG_contrast_curve)
+	#Saves the curve outputs
+	np.savetxt('new_{algo}_{star_name}_curve_outputs'.format(algo=algo, star_name=name_input), contrast_curve)
 	
+	#Initialises the contrast curve variables
+	size = 500
 
-	PCA_data = PCA_contrast_curve
-	LLSG_data = LLSG_contrast_curve
-	
-	#Initialises the PCA variables (500 being the size).
-	PCA_Distance = np.zeros(500)
-	PCA_Sensitivity_Gauss = np.zeros(500)
-	PCA_Sensitivity_Student = np.zeros(500)
-	
-	LLSG_Distance = np.zeros(500)
-	LLSG_Sensitivity_Gauss = np.zeros(500)
-	LLSG_Sensitivity_Student = np.zeros(500)
+	distance = np.zeros(size)
+	sensitivity_Gauss = np.zeros(size)
+	sensitivity_Student = np.zeros(size)
+
+	"""
+    PANDAS DATAFRAME: (IF STUDENT == TRUE)
+    0 - sensitivity_gaussian
+    1 - sensitivity_student
+    2 - throughput
+    3 - distance
+    4 - distance_arcsec
+    5 - noise
+    6 - sigma corr
+
+    PANDAS DATAFRAME: (IF STUDENT == FALSE)
+    0 - sensitivity_gaussian
+    1 - throughput
+    2 - distance
+    3 - distance_arcsec
+    4 - noise
+    """
 
 	#Loop loads the PCA outputs into the PCA variables.
-	for a in range (0,500):
-		PCA_Distance[a] = PCA_data[a,0] * pxscale_keck
-		PCA_Sensitivity_Gauss[a] = PCA_data[a,2]
-		PCA_Sensitivity_Student[a] = PCA_data[a,3]	
+	for a in range (0, size):
+		distance[a] = contrast_curve[a,3] * pxscale_keck
+		sensitivity_Gauss[a] = contrast_curve[a,0]
+		sensitivity_Student[a] = contrast_curve[a,1]  
 
-	#Loop loads the LLSG outputs into the LLSG variables.
-		LLSG_Distance[a] = LLSG_data[a,0] * pxscale_keck
-		LLSG_Sensitivity_Gauss[a] = LLSG_data[a,2]
-		LLSG_Sensitivity_Student[a] = LLSG_data[a,3]
-	
 	#Plotting all 3 on one curve: 
 	fig = plt.figure(figsize=(8,4))		#Initialises the plot.
 	ax1 = fig.add_subplot(111)			#Creates the axis.
 	
-	#Creates and positions the legend.
-	handles, labels = ax1.get_legend_handles_labels()
-	line_up, = plt.plot([1,2,3], label='Line 2')
-	line_down, = plt.plot([3,2,1], label='Line 1')
-	plt.legend(handles=[line_up, line_down])
-	ax1.legend(handles, labels)
-	
 	#Formats the colour and text for the legends, colour represented by hexadecimal.
-	PCA_Legend = mpatches.Patch(color='#fcb141', label='PCA Contrast Curve')
-	LLSG_Legend = mpatches.Patch(color='#2f6fac', label='LLSG Contrast Curve')
-	plt.legend(handles=[PCA_Legend,LLSG_Legend])
+	legend = mpatches.Patch(color='#fcb141', label='%s Contrast Curve' % algo)
+
+	plt.legend(handles=[legend])
 	
 	plt.xlabel('Angular separation [arcsec]')	#X Label.
 	plt.ylabel(str(sigma)+' sigma contrast')	#Y Label.
@@ -563,80 +600,16 @@ def Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sig
 	
 	#Sets the y axis scale and the range of limits. 
 	ax1.set_yscale('log')
-	plt.ylim((0.000001,0.01))
+	y_min = 1E-6
+	y_max = 1E-2
+	plt.ylim((y_min, y_max))
 	
 	#Creates the variables that will be plotted.
-	Curve = [0,0]	#Initialises the Curve variable.
-	Curve[1] = plt.plot(PCA_Distance, PCA_Sensitivity_Gauss, linewidth =2, color='#fcb141')
-	Curve[0] = plt.plot(LLSG_Distance, LLSG_Sensitivity_Gauss, linewidth =2, color='#2f6fac')
-	
-	savefig('new_Contrast_curves_no_ADI_{star_name}.png'.format(star_name=name_input))
+	Curve = plt.plot(distance, sensitivity_Gauss, linewidth =2, color='red')
 
 	plt.show(Curve)
 	
-	#LLSG contrast curve 
-	
-	fig = plt.figure(figsize=(8,4))		#Initialises the plot.
-	ax1 = fig.add_subplot(111)			#Creates the axis.
-	
-	#Creates and positions the legend.
-	handles, labels = ax1.get_legend_handles_labels()
-	line_up, = plt.plot([1,2,3], label='Line 2')
-	line_down, = plt.plot([3,2,1], label='Line 1')
-	plt.legend(handles=[line_up, line_down])
-	ax1.legend(handles, labels)
-	
-	#Formats the colour and text for the legends, colour represented by hexadecimal.
-	LLSG_Legend = mpatches.Patch(color='#2f6fac', label='LLSG Contrast Curve')
-	plt.legend(handles=[LLSG_Legend])
-	
-	plt.xlabel('Angular separation [arcsec]')	#X Label.
-	plt.ylabel(str(sigma)+' sigma contrast')	#Y Label.
-	
-	
-	#Sets the y axis scale and the range of limits. 
-	ax1.set_yscale('log')
-	plt.ylim((0.000001,0.01))
-	
-	#Creates the variables that will be plotted.
-	Curve = 0	#Initialises the Curve variable.
-	Curve = plt.plot(LLSG_Distance, LLSG_Sensitivity_Gauss, linewidth =2, color='#2f6fac')
-	
-	#Saves the figure and then shows the plot. 
-	savefig('new_LLSG_curves_{star_name}.png'.format(star_name=name_input))
 
-	plt.show(Curve)
-	
-	#PCA contrast curve. 
-	
-	fig = plt.figure(figsize=(8,4))		#Initialises the plot.
-	ax1 = fig.add_subplot(111)			#Creates the axis.
-	
-	#Creates and positions the legend.
-	handles, labels = ax1.get_legend_handles_labels()
-	line_up, = plt.plot([1,2,3], label='Line 2')
-	line_down, = plt.plot([3,2,1], label='Line 1')
-	plt.legend(handles=[line_up, line_down])
-	ax1.legend(handles, labels)
-	
-	#Formats the colour and text for the legends, colour represented by hexadecimal.
-	PCA_Legend = mpatches.Patch(color='#fcb141', label='PCA Contrast Curve')
-	plt.legend(handles=[PCA_Legend])
-	
-	plt.xlabel('Angular separation [arcsec]')	#X Label.
-	plt.ylabel(str(sigma)+' sigma contrast')	#Y Label.
-	
-	#Sets the y axis scale and the range of limits. 
-	ax1.set_yscale('log')
-	plt.ylim((0.000001,0.01))
-	
-	#Creates the variables that will be plotted.
-	Curve = 0	#Initialises the Curve variable.
-	Curve = plt.plot(PCA_Distance, PCA_Sensitivity_Gauss, linewidth =2, color='#fcb141')
-	
-	#Saves the figure and then shows the plot. 
-	savefig('new_PCA_curve_{star_name}.png'.format(star_name=name_input))
-	plt.show(Curve)
 
 
 """
@@ -771,7 +744,83 @@ End of defining functions
 """
 
 
+def CenteringLoop(cube_orig, angs, psf):
 
+	
+	#---------------------------------------------------------------
+	print("Recentering Cube")
+	print(" There are two ways to recenter the cube")
+	print(" 1. Use a 2D Gaussian Fit")
+	print(" 2. Recenter manually. (Use if Gaussian fit doesn't work. Works if all images are already aligned but not in the center of the image)")
+	
+	while True:
+		print(" Choose 1 (Gaussian fit) or 2 (manual fit): ")
+		fit_method = input()
+		if fit_method == '1' or fit_method == '2':
+			break
+		else:
+			print(" ->Option not recognised, please input '1' or '2'. ")
+	
+	# Initialise variable
+	star_xy = [0.1, 0.1]
+	
+	print("Using DS9, open any image in Newcube.fits")
+	star_xy[0] = input("Input the x coordinate of the central position of the star: ")
+	star_xy[0] = int(star_xy[0])
+		
+	star_xy[1]=input("Input the x coordinate of the central position of the star: ")
+	star_xy[1] = int(star_xy[1])
+	
+	
+	#Opens the cube (using VIP) with cube_orig as HDU:0 and calls it cube_orig, 
+	#and the parallactic angles from a text file.
+	#Uses VIP to also open the point spread function previously loaded in.
+		
+	
+	cube1 = cube_orig
+	
+	# Gaussian Fit
+	if fit_method == '1':
+		print(" --2D Gaussian Fit")
+		print( "Fitting a 2D gaussian to centre the images..." )
+		#Uses VIP's 2D gaussian fitting algorithm to centre the cube.
+		cube1, shy1, shx1, fwhm = Gaussian_2d_Fit( psf, cube_orig, star_xy)
+	
+	# Manual Fit
+	elif fit_method == '2':
+		print(" --Manual Fit")
+		# Calculate shifts here
+		image_centre = [512, 512]
+		print(" Image centre is at", image_centre)
+		shift_x = image_centre[0] - star_xy[0]
+		shift_y = image_centre[1] - star_xy[1]
+		cube1 = vip.preproc.recentering.cube_shift(cube_orig, shift_y, shift_x)
+		fwhm = Calculate_fwhm(psf)
+		
+	
+	#Writes the values of the centered cube into a fits file.
+	vip.fits.write_fits('centeredcube_{name}.fits'.format(name=name_input), cube1, verbose=True)	
+
+	cube = cube1
+	#Loads up the centered cube.
+	#Plots the original cube vs the new centered cube.
+
+	im1 = vip.preproc.cosmetics.frame_crop(cube_orig[0], 1000, verbose=False)
+	im2 = vip.preproc.cosmetics.frame_crop(cube[0], 1000, verbose=False)
+
+	hciplot.plot_frames( 
+		(im1, im2), 
+		label = ('Original first frame', 'First frame after recentering'), 
+		grid = True, 
+		size_factor = 4
+		)
+	
+	print( "Open DS9 and look through the centred data cube at each frame making sure it is centred.")
+	print( "If you're not happy with it, redo centring" )
+	print( "Redo Centring?" )
+	cent_loop = Checkfunction()
+
+	return cube, cent_loop
 
 
 
@@ -937,13 +986,13 @@ Returns LLSG frame, and residuals cube for STIM map
 def LLSG(cube, angs, fwhm, name_input):
 
 	print( "\n   --- LLSG")
-	Rank = input("What rank of llsg would you like to do? (default =6)\n")
-	Rank = int(Rank)
+	rank = input("What rank of llsg would you like to do? (default = 6)\n")
+	rank = int(rank)
 	
 	#Reduces the image using the LLSG algorithm then plots the image.
 	print(fwhm)
 	llsg_output = vip.llsg.llsg(cube, angs, fwhm=fwhm, 
-							rank = Rank, thresh = 2, 
+							rank = rank, thresh = 2, 
 							max_iter = 20, random_seed = 10,
 							full_output = True)
 
@@ -977,7 +1026,7 @@ def LLSG(cube, angs, fwhm, name_input):
 		vip.fits.write_fits('new_LLSG_{name}.fits'.format(name=name_input), llsg_frame, verbose=True)
 
 
-	return llsg_frame, llsg_residual_sparse
+	return llsg_frame, llsg_residual_sparse, rank
 
 
 
@@ -1015,42 +1064,52 @@ def StimMap(residuals_cube, name_input, origin_algo):
 """
 -----------------	CONTRAST CURVES	-----------------
 """
-def ContrastCurves(cube, angs, psf, fwhm, starphot, optimal_pcs, name_input):
-
+# 'param' input refers to optimal PCs if using PCA, and the LLSG rank if using LLSG.
+# 'algo' refers to the algorithm used: 'PCA', 'annPCA', or 'LLSG'.
+def ContrastCurves(cube=None, angs=None, psf=None, fwhm=None, starname=None, param=None, algo=None):
 
 	print(" Performing Starphot calculation...")
 	#Starphot is the  total aperture flux from the star during
 	#the integration time (if no coronograph).
-	starphot = StarphotCalculation(Number_images, psf_xy, starphot)
+	starphot = StarphotCalculation(cube.shape[0], psf, fwhm)
 	starphot_array = np.zeros(500)
 
-	for i in range (0,500):
-		starphot_array [i] = starphot
-
-	np.savetxt('{name}_starphot'.format(name=name_input), starphot_array)
-
-	
+	starphot_array = np.full(500, starphot)
+	np.savetxt('%s_starphot' % starname, starphot_array)
 
 
 	print(" Building contrast curves...")
 
-
 	psf_norm = vip.metrics.fakecomp.normalize_psf(psf, fwhm, size=101, threshold=None, mask_core=None)
 
-	PCA_contrast_curve = vip.metrics.contrcurve.contrast_curve(
-		cube, angs, psf_norm, fwhm, pxscale_keck, starphot,
-		sigma=sigma, nbranch=1, algo=vip.pca.pca, 
-		ncomp=optimal_pcs, debug=True,save_plot='PCA'
-		)
-	# ncomp = 40
+	contrast_curve = None
 
-	LLSG_contrast_curve =  vip.metrics.contrcurve.contrast_curve(
-		cube, angs, psf_norm, fwhm, pxscale_keck, starphot,
-		sigma=sigma, nbranch=1, algo=vip.llsg.llsg, 
-		debug=True,save_plot='LLSG'
-		)
+	if (algo == 'PCA'):
+		contrast_curve = vip.metrics.contrcurve.contrast_curve(
+			cube, angs, psf_norm, fwhm, pxscale_keck, starphot,
+			sigma=sigma, nbranch=1, algo=vip.pca.pca, 
+			ncomp=param, debug=True, save_plot='PCA'
+			)
+		Contrastcurvedata(contrast_curve, pxscale_keck, sigma, name_input, 'PCA')
+	
+	elif (algo == 'annPCA'):
+		contrast_curve = vip.metrics.contrcurve.contrast_curve(
+	    	cube, angs, psf, fwhm, pxscale_keck, starphot,
+	    	sigma=sigma, nbranch=1, algo=vip.pca.pca_local.pca_annular, 
+	    	debug=True,save_plot='AnnPCA', verbose=2, student=True,
+	    	ncomp=param
+	    	)
+		Contrastcurvedata(contrast_curve, pxscale_keck, sigma, name_input, 'annPCA')
 
-	Contrastcurvedata(PCA_contrast_curve, LLSG_contrast_curve, pxscale_keck, sigma, name_input)
+	elif (algo == 'LLSG'):
+		contrast_curve =  vip.metrics.contrcurve.contrast_curve(
+			cube, angs, psf_norm, fwhm, pxscale_keck, starphot,
+			sigma=sigma, nbranch=1, algo=vip.llsg.llsg, 
+			debug=True,save_plot='LLSG', rank = param
+			)
+		Contrastcurvedata(contrast_curve, pxscale_keck, sigma, name_input, 'LLSG')
+
+
 
 
 
@@ -1064,7 +1123,8 @@ def ContrastCurves(cube, angs, psf, fwhm, starphot, optimal_pcs, name_input):
 def Andromeda(cube, angs, psf, fwhm):
 	
 	print(" Running ANDROMEDA algorithm...")
-	print(" (may take an hour or more to complete)")
+	print(" (Takes around 45 min to 1h 30min)")
+	print(" (So sit back, relax, and have a cuppa)")
 	
 	# Normalises PSF (Done above too)
 	psf = vip.metrics.fakecomp.normalize_psf(psf, fwhm, size=100,
@@ -1072,53 +1132,53 @@ def Andromeda(cube, angs, psf, fwhm):
 										mask_core=None,
 										force_odd = False)
 
+	print("Cube has shape", cube.shape)
+	print("PSF has shape", psf.shape)
+
 	# Andromeda requires even-sized images, hence "force_odd = False" is used.
 
 
 	# In NIRC2, the Kp filter has central wavelength 2.124 um
-	#			and Bandpass width 0.351 um
 	# Source: https://www2.keck.hawaii.edu/inst/nirc2/filters.html
+	Kp_wavelength = 2.124E-6
+	
+	# Keck Telescope has an aperture diameter of 10 meters
+	diam_tel = 10
+	
+	# Pixel scale in mas/pixel
+	pxscale = pxscale_keck * 1E3
+	
+	# Nyquist pixel scale at Shannon wavelength in mas/pixel
+	pxscale_nyq = 1/2 * (180*3600*1E3 / np.pi) * (Kp_wavelength / diam_tel)
+	
+	oversampling_factor = pxscale_nyq / pxscale
 
-	print("Cube has shape", cube.shape)
-	print("PSF has shape", psf.shape)
-
-	survey_wavelength = 2.124
-	shannon_wavelength = 0.351
-
-	oversampling_factor = survey_wavelength/shannon_wavelength
-
-	# Ran code on HIP544 with default settings and iwa=1. Outputs:
-	"""
-	WARNING: 18 frame(s) cannot be used because it wasn't possible to find any other frame to couple with them. 
-	Their indices are: [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
-	For all frames to be used in this annulus, the minimum separation must be set at most to 0.3631489127511684 *lambda/D 
-	(corresponding to 4.395032995347474 pixels).
-	"""
-	# The set min_sep to 0.36
-
-
+	# Set min_sep to 0.36 because it works.
 	andromeda_output = vip.andromeda.andromeda(
 						cube,
 						oversampling_factor,
-						angs,
-						psf,
+						angles = angs,
+						psf = psf,
 						iwa = 1,
 						min_sep = 0.36,
 						verbose = True
 						)
 
-	print("Andromeda output length", len(andromeda_output))
+	print("Andromeda output length:", len(andromeda_output))
 
-	contrast_andr = andromeda_output[0]
-	snr_map_andr = andromeda_output[1]
-	snr_norm_map_andr = andromeda_output[2]
-	stdcontrast_map_andr = andromeda_output[3]
-	stdcontrast_norm_andr = andromeda_output[4]
-	likelihood_andr = andromeda_output[5]
-	ext_radius_andr = andromeda_output[6]
+	contrast_andr = andromeda_output[0]			# Contrast map / flux map
+	snr_map_andr = andromeda_output[1]			# SNR map
+	snr_norm_map_andr = andromeda_output[2]		# Normalised SNR Map
+	stdcontrast_map_andr = andromeda_output[3]	# Standard Deviation Contrast map
+	stdcontrast_norm_andr = andromeda_output[4]	# Normalised Standard Deviation Contrast map
+	likelihood_andr = andromeda_output[5]		# Likelihood map
+	ext_radius_andr = andromeda_output[6]		# External/cut-off processing radius
 
-
+	vip.fits.write_fits('ANDR_snrmap_{name}.fits'.format(name=name_input), snr_map_andr, verbose=True)
+	vip.fits.write_fits('ANDR_snrnorm_{name}.fits'.format(name=name_input), snr_norm_map_andr, verbose=True)
 	vip.fits.write_fits('ANDR_contrast_{name}.fits'.format(name=name_input), contrast_andr, verbose=True)
+	vip.fits.write_fits('ANDR_contrast_stddev_{name}.fits'.format(name=name_input), stdcontrast_map_andr, verbose=True)
+	vip.fits.write_fits('ANDR_contrastnorm_stddev_{name}.fits'.format(name=name_input), stdcontrast_norm_andr, verbose=True)
 	vip.fits.write_fits('ANDR_likelihood_{name}.fits'.format(name=name_input), likelihood_andr, verbose=True)
 
 	print("ext_radius = ", ext_radius_andr)
@@ -1127,6 +1187,10 @@ def Andromeda(cube, angs, psf, fwhm):
 
 
 
+#*******************************************************************
+#*******************************************************************
+#*******************************************************************
+#*******************************************************************
 
 
 
@@ -1145,139 +1209,73 @@ print("\n Version 12 \n\n")
 """
 ------ 1 - STAR NAME AND PRE-PROCESSING LOOP
 """
-	
 name_input = input('Name of the star (example = HIP_544):  ')
-Centring_loop = 0 # Initialise loop to allow for re centring
 
-while Centring_loop == 0:
-	
-	#Loads the filenames into python and counts the number of files.
+#Loads the filenames into python and counts the number of files.
+file_names = ReadImageFilenames(name_input)
+Number_images = len(file_names)
+
+
+"""
+	------ 2 - CREATE DATA CUBE
+"""
+print( "Would you like to create the data cube?")
+
+#Loop runs the Readangles and Buildcube functions, building the data cube.
+if Checkfunction() == 0:
 	file_names = ReadImageFilenames(name_input)
 	Number_images = len(file_names)
-	
-	
-	"""
-	------ 2 - CREATE DATA CUBE
-	"""
-	build_check = 0
-	#Initialises the variable which is used to build the cube (or not).
-	print( "Would you like to create the data cube?")
-	build_check = Checkfunction()
+	Readangles(Number_images,name_input)
+	Buildcube(Number_images,name_input)
 
-	#Loop runs the Readangles and Buildcube functions, building the data cube.
-	if build_check == 0:
-		file_names = ReadImageFilenames(name_input)
-		Number_images = len(file_names)
-		Readangles(Number_images,name_input)
-		Buildcube(Number_images,name_input)
 
-	
-	print( "Open DS9 and look through the created data cube at each frame, taking note of the bad frames" )
-	remove_check = 0
-	
-	
-	"""
-	------ 3 - REMOVE BAD IMAGES
-	"""
-	print( "Would you like to remove any image?" )
-	remove_check = Checkfunction()
+"""
+------ 3 - REMOVE BAD IMAGES
+"""
+print( "Would you like to remove any bad frames?" )
 
-	#Loop runs the Removeimage function and then overwrites the new shortened list to
-	#the original text file. 
-	if remove_check == 0:
-		
-		file_names = Removeimage(Number_images,name_input)
-		file_names = file_names.tofile('{name}_filenames.txt'.format(name=name_input), sep ="\n", format='%s')
-		file_names = ReadImageFilenames(name_input)
-		Number_images = len(file_names)
-		Readangles(Number_images,name_input)
-		Buildcube(Number_images,name_input)
-	
+#Loop runs the Removeimage function and then overwrites the new shortened list to
+#the original text file. 
+if Checkfunction() == 0:		
+	file_names = Removeimage(Number_images,name_input)
+	file_names = file_names.tofile('{name}_filenames.txt'.format(name=name_input), sep ="\n", format='%s')
+	file_names = ReadImageFilenames(name_input)
+	Number_images = len(file_names)
+	Readangles(Number_images,name_input)
+	Buildcube(Number_images,name_input)
 
-	"""
-	------ 4 - RECENTERING
-	"""
-	#Loads the psf and the cube fits into python.
-	initialpsf = './psf.fits'			
-	cube = './Newcube.fits'
-	
-	
-	print("Recentering Cube")
-	print(" There are two ways to recenter the cube")
-	print(" 1. Use a 2D Gaussian Fit=")
-	print(" 2. Recenter manually. (Use if Gaussian fit doesn't work. Works if all images are already aligned but not in the center of the image)")
-	
-	while True:
-		print(" Choose 1 (Gaussian fit) or 2 (manual fit): ")
-		fit_method = input()
-		if fit_method == '1' or fit_method == '2':
-			break
-		else:
-			print("Option not recognised")
-	
-	print(" Fit method = ", fit_method)
-	
-	
-	star_xy = [0.1, 0.1]
-	
-	print("Using DS9, open any image in Newcube.fits")
-	star_xy[0] = input("Input the x coordinate of the central position of the star: ")
-	star_xy[0] = int(star_xy[0])
-		
-	star_xy[1]=input("Input the x coordinate of the central position of the star: ")
-	star_xy[1] = int(star_xy[1])
-	
-	
-	#Opens the cube (using VIP) with cube_orig as HDU:0 and calls it cube_orig, 
-	#and the parallactic angles from a text file.
-	#Uses VIP to also open the point spread function previously loaded in.
-		
-	cube_orig = vip.fits.open_fits(cube)
-	angs = np.loadtxt( '{name}_angles.txt'.format(name = name_input) )
-	psf = vip.fits.open_fits(initialpsf, n=0, header=False, ignore_missing_end=True, verbose=True)
-	
-	cube1 = cube_orig
-	
-	# Gaussian Fit
-	if fit_method == '1':
-		print(" --2D Gaussian Fit")
-		print( "Fitting a 2D gaussian to centre the images..." )
-		#Uses VIP's 2D gaussian fitting algorithm to centre the cube.
-		cube1, shy1, shx1, fwhm = Gaussian_2d_Fit( psf, cube_orig, star_xy)
-	
-	# Manual Fit
-	elif fit_method == '2':
-		print(" --Manual Fit")
-		# Calculate shifts here
-		image_centre = [512, 512]
-		print(" Image centre is at", image_centre)
-		shift_x = image_centre[0] - star_xy[0]
-		shift_y = image_centre[1] - star_xy[1]
-		cube1 = vip.preproc.recentering.cube_shift(cube_orig, shift_y, shift_x)
-		fwhm = Calculate_fwhm(psf)
-		
-	
-	#Writes the values of the centered cube into a fits file.
-	vip.fits.write_fits('centeredcube_{name}.fits'.format(name=name_input), cube1, verbose=True)	
 
-	cube = cube1
-	#Loads up the centered cube.
-	#Plots the original cube vs the new centered cube.
+"""
+------ 4 - RECENTERING
+"""
 
-	im1 = vip.preproc.cosmetics.frame_crop(cube_orig[0], 1000, verbose=False)
-	im2 = vip.preproc.cosmetics.frame_crop(cube[0], 1000, verbose=False)
+# Retrieving angles and PSF
+angs = np.loadtxt( '{name}_angles.txt'.format(name = name_input) )
+psf = vip.fits.open_fits('./psf.fits', n=0, header=False, ignore_missing_end=True, verbose=False)
 
-	hciplot.plot_frames( 
-		(im1, im2), 
-		label = ('Original first frame', 'First frame after recentering'), 
-		grid = True, 
-		size_factor = 4
-		)
-	
-	print( "Open DS9 and look through the centred data cube at each frame making sure it is centred.")
-	print( "If you're not happy with it, redo centring" )
-	print( "Redo Centring?" )
-	Centring_loop = Checkfunction()
+print(" Would you like to recenter the cube? ")
+cent_loop = Checkfunction()
+
+if cent_loop == 0:
+	cube_orig = vip.fits.open_fits('./Newcube.fits')
+	re_loop = 0
+	while re_loop == 0:
+		cube, re_loop = CenteringLoop(cube_orig, angs, psf)
+
+elif cent_loop == 1:
+	cube = vip.fits.open_fits('centeredcube_{name}.fits'.format(name=name_input))
+	#Cropping cube to even size (1022x1022)
+	cube = vip.preproc.cosmetics.cube_crop_frames(
+									cube, 1022, verbose=False, force=True)
+
+fwhm = Calculate_fwhm(psf)
+star_xy = [512.0, 512.0]
+
+
+print("Cube =", cube.shape )
+print("PSF =", psf.shape )
+
+	#---------------------------------------------------------------
 
 
 
@@ -1288,200 +1286,31 @@ while Centring_loop == 0:
 # ****************************************************************
 
 
+
+
 # Full Frame PCA
-ffpca_frame, optimal_pcs = FullFramePCA(cube, angs, fwhm, name_input)
+#ffpca_frame, optimal_pcs = FullFramePCA(cube, angs, fwhm, name_input)
 
 # Annular PCA
-annpca_frame, pca_residuals = AnnularPCA(cube, angs, fwhm, name_input)
+#annpca_frame, pca_residuals = AnnularPCA(cube, angs, fwhm, name_input)
+
+
 
 # LLSG
-llsg_frame, llsg_residuals = LLSG(cube, angs, fwhm, name_input)
+#llsg_frame, llsg_residuals, llsg_rank = LLSG(cube, angs, fwhm, name_input)
 
 # STIM Map
-StimMap(pca_residuals, name_input, "PCA")
-StimMap(llsg_residuals, name_input, "LLSG")
+#StimMap(pca_residuals, name_input, "PCA")
+#StimMap(llsg_residuals, name_input, "LLSG")
 
 # Contrast Curves
-ContrastCurves(cube, angs, psf, fwhm, starphot, optimal_pcs, name_input)
+#ContrastCurves(cube=cube, angs=angs, psf=psf, fwhm=fwhm, starname=name_input, param=optimal_pcs, algo='PCA')
+#ContrastCurves(cube=cube, angs=angs, psf=psf, fwhm=fwhm, starname=name_input, param=optimal_pcs, algo='annPCA')
+llsg_rank = 6
+ContrastCurves(cube=cube, angs=angs, psf=psf, fwhm=fwhm, starname=name_input, param=llsg_rank, algo='LLSG')
 
 # Andromeda
-Andromeda(cube, angs, psf, fwhm)
-
-
-
-
-
-
-
-"""
------- - INJECT FAKE PLANETS
-"""
-
-"""
-number_planets = 0.1 #Initialises the variable as an odd number to use the integer check loop.
-
-#Loop checks that the number of planets is in fact an integer.
-while isinstance(number_planets, int) == False or number_planets > 6:
-
-	if Loop_count == 0:
-		number_planets = input("Enter the integer number (1-6) of artificial planets to inject (recomended 5).\n")
-	if Loop_count > 0:
-		print( "\nThis is not an allowed value.\nPlease try again\n" )
-		number_planets = input("Enter the number of artificial planets to inject.\n")
-
-	Loop_count = Loop_count + 1 
-
-#Sets loop count to 0 to be used again.
-if isinstance(number_planets, int) == True:
-	Loop_count = 0
-
-#Loop for if artificial planets are used, loop calculates where to place them,
-#injects them and then removes them again.
-if number_planets > 0:
-	rad_dists = np.empty(number_planets)
-
-	#Calculates the orbital radius to place the injected planets at.	
-	for i in range(number_planets):
-		rad_dists[i] = seperation * (i+1)
-	
-	print( rad_dists )
-
-	#Loop to check that the number of branches entered is an integer number.
-	n_branches=0.1 #Initialises the variable to non integer so loop will run
-	while isinstance(n_branches, int) == False:
-
-		if Loop_count == 0:
-			n_branches=input("How many branches of synthetic planets would you like to use (recomended 3)?\n")
-		if Loop_count > 0:
-			print( "\nThis is not an integer.\nPlease enter an integer number\n" )
-			n_branches = input("How many branches of synthetic planets would you like to use?\n")
-
-		Loop_count = Loop_count+1 
-
-	#Sets Loop_count to 0 for use again.
-	if isinstance(n_branches, int) == True:
-		Loop_count = 0
-
-	#Calculates the locations of the branches with their respective injected planets.
-	if n_branches > 0:
-		theta = 360 / n_branches	#The angle to separate each branch by.
-
-	#Checks if the user would like to input their own 
-	#brightness value for the injected planets.
-	brightness_check=0
-	Loop_count = 1 #allows error check of choice of flux input
-	print( "1. Enter planet brightness manually (eg. flux of candidate)\n" )
-	print( "2. Use background brightness multiplied by user value (recomended 3)\n" )
-
-	while Loop_count:
-		brightness_check = input("Enter choice (1,2):\t")
-		if brightness_check == 1 or brightness_check == 2:
-			Loop_count = 0
-		else:
-			print( "\nInvalid entry\n" )
-
-	#Loop for the user to use their own value of flux.
-	if brightness_check == 1:
-		flvl = input("Please input the planets brightness here\n")
-
-	#Loop for when the user does not want to enter a flux value and ask for multiple value of of background flux.
-	if brightness_check == 2:
-		Loop_count = 1 #allows loop to check if correct value entered ie not zero, loop breaks when Loop_count=0
-		flux_multiple = 3
-		while Loop_count:
-			flux_multiple = input("Enter multiple value for background flux (3 recomended)\n")
-			if flux_multiple < 0.00001:
-				print( "\nInvalid Entry\n" )
-			else:
-				Loop_count = 0	
-						
-		averageflux = backgroundflux(cube, averageflux)
-		flvl = float(averageflux)*float(flux_multiple)
-
-#Creates a normalised PSF and a data cube with the injected planets.
-psf = vip.metrics.fakecomp.normalize_psf(psf, fwhm, size=100, threshold=None, mask_core=None)
-cubefc = vip.metrics.fakecomp.cube_inject_companions(cube, psf, angs, flevel=flvl, plsc=pxscale_keck,rad_dists=rad_dists,theta=theta, n_branches=n_branches) 
-
-#Initialises a bunch of variables to do with calculating the location
-#of the injected planets.
-
-average = np.zeros(2)
-sum = np.zeros(2)
-newcent = np.zeros(2)
-synplanetlocation = np.zeros(2)
-
-#From the shift of frames in pixels, find the center of the image
-Nx = np.prod(shx1.shape)
-for i in range(0,Nx):
-	sum[0] = sum[0] + shx1[i]
-	
-average[0] = sum[0]/Nx	
-
-Ny = np.prod(shy1.shape)
-for i in range(0,Ny):
-	sum[1] = sum[1] + shy1[i]
-	
-average[1] = sum[1]/Ny	
-
-newcent[0] = star_xy[0] + average[0] 
-newcent[1] = star_xy[1] + average[1]
-
-
-synplanetlocation[0] = newcent[0] + (seperation * sin(-theta))
-synplanetlocation[1] = newcent[1] + (seperation * cos(-theta))
-synplanetlocation[0] = round(synplanetlocation[0])
-	#There will be a noticeable error if the shift between images is large
-synplanetlocation[1] = round(synplanetlocation[1])
-	#These are only rough guesses, tends to be out by a couple of pixels
-
-print( "synplanetlocation = ", synplanetlocation)
-
-# Optimises the number of principle components with the new cubefc.
-opt_pcs = vip.pca.pca_optimize_snr(
-	cubefc, angs, fwhm=fwhm, 
-	source_xy=(synplanetlocation[0], synplanetlocation[1]),
-	mask_center_px=None, fmerit='mean', range_pcs=(1,20)
-	)
-
-#Plots the data cube with the injected planets
-fr_pca3 = vip.pca.pca(cubefc, angs, ncomp=opt_pcs)
-
-vip.fits.write_fits('new_Planet_injectionPCA.fits', fr_pca3, verbose=True) 
-
-_ = vip.metrics.frame_analysis.frame_quick_report(fr_pca3, fwhm=fwhm, source_xy=(synplanetlocation[0],synplanetlocation[1]))
-	#give nan in here (?)
-"""
-	
-"""
-Some code commented here (planet subtraction)
------------------------------------------------
-
-source_xy=[(reference_xy[0], reference_xy[1])]
-
-print( "source_xy = ", source_xy )
-
-r_0, theta_0, f_0=firstguess(cubefc, angs, psf, ncomp=10, plsc=pxscale_keck,planets_xy_coord=source_xy,
-fwhm=fwhm,annulus_width=3, aperture_radius=3,f_range=np.linspace(100,2000,20),  simplex=True, display=True, verbose=True)
-
-# Planet subtraction
-plpar_bpicb=[(r_0, theta_0, f_0)]
-cube_emp=cube_planet_free(plpar_bpicb, cubefc, angs, psf, pxscale_keck)
-fr_pca_emp=vip.pca.pca(cube_emp, angs, ncomp=opt_pcs, verbose=False)
-pt_sub = 0.1
------------------------------------------------
-
-"""
-
-
-
-
-
-
-
-
-
-
-
+#Andromeda(cube, angs, psf, fwhm)
 
 
 print( "===========================	End of the program	===========================" )

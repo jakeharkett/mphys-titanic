@@ -1,6 +1,12 @@
 # MPhys Scripts
 
-A collection of scripts used in the 2019/2020 MPhys group.
+A collection of scripts and code used in the 2019/2020 MPhys group.
+
+## Common
+Commonly used scripts in the project:
+	Projectscript
+	Age Code
+	Detection Algorithm
 
 ## Web-Database
 Holds all resources related to creating the SQL database for the website.
