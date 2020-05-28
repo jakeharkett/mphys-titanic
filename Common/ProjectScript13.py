@@ -168,7 +168,22 @@ def LLSG(cube, angs, fwhm, name_input):
 """
 -----------------	LLSG	-----------------
 
-Returns LLSG frame, and residuals cube for STIM map. 
+Adpated from vip_hci. Returns LLSG frame, residual cube for STIM map and the rank for running contrast curve. 
+
+When fulloutput == True, LLSG full output from VIP (0.9.11) is:
+		0 - list_l_array_der
+		1 - list_s_array_der
+		2 - list_g_array_der
+		3 - frame_l
+		4 - frame_s
+		5 - frame_g
+    
+    Each is the frame and residual cube for the three noise types:
+    l (low-rank), s (sparse), g (gaussian)
+
+    Companions are in the Sparse noise.
+    
+    To get STIM map of LLSG, input 'list_s_array_der' into STIM Map
 
 Parameter: 
 	cube : numpy ndarray, 3d
@@ -180,7 +195,7 @@ Parameter:
 	name_input : character string
 		Name of the star (obtained from the first input)
 
-Return:	
+Return:		
 	llsg_frame : numpy ndarray, 2d
 		Residual frame
 
@@ -188,54 +203,33 @@ Return:
 		Residual Cube
 
 	Rank : integer 
-		Rank of 
-
-
-
-	
+		Expected rank for the L component
 
 """
 
 	print( "\n   --- LLSG")
+
 	Rank = input("What rank of llsg would you like to do? (default =6)\n")
 	Rank = int(Rank)
 
-	#Reduces the image using the LLSG algorithm then plots the image.
 	print(fwhm)
 
+	# Reduces the image using the LLSG algorithm then plots the image.
 	llsg_output = vip.llsg.llsg(cube, angs, rank = Rank, fwhm=fwhm, thresh = 2, max_iter = 20, random_seed = 10,full_output = True)
 
-	"""
-	llsg_output = vip.llsg.llsg(cube, angs, rank = None, fwhm=fwhm, 
-							max_iter = len(cube)-1, full_output = True, auto_rank_mode='noise',
-							low_rank_mode='svd', residuals_tol=1e-1, cevr=0.9, thresh_mode='soft', nproc=1, n_segments=4, azimuth_overlap=None, radius_int=mask_center,
-							random_seed=None, imlib='opencv', interpolation='lanczos4',
-							high_pass=5, collapse='median', verbose=True,
-							debug=True)
-	"""
-
-	# LLSG full output is:
-	#0	list_l_array_der
-	#1	list_s_array_der
-	#2	list_g_array_der
-    #3	frame_l
-    #4	frame_s
-    #5	frame_g
-    # Each is the frame and residual cube for the three noise types:
-    # l (low-rank), s (sparse), g (gaussian)
-    # Companions are in the Sparse noise.
-    # To get STIM map of LLSG, input 'list_s_array_der' into STIM Map
-
+	# Store the sparse frame
 	llsg_frame = llsg_output[4]
+	# Store the sparse residual cube
 	llsg_residual_sparse = np.asarray( llsg_output[1][0] )
-		#list_s_array_der is a list of one member,
-		# this one member is another list of the 24 residual images
-		# So get that one element, and make it an array.
+	
+	# list_s_array_der is a list of one member,
+	# this one member is another list of the 24 residual images
+	# So get that one element, and make it an array.
 
 	hciplot.plot_frames(llsg_frame, label ='LLSG reduced image of {name}'.format(name=name_input))
 	
 	
-	#Loop asks user if the would like to save the image.
+	# Asks user if the would like to save the image.
 	print( 'Would you like to save the LLSG reduced image?\n' )
 	questionsave = Checkfunction()
 
@@ -249,7 +243,7 @@ Return:
 -----------------	STIM MAP	-----------------
 """
 def StimMap(residuals_cube, name_input, origin_algo):
-
+	
 	print("Computing STIM map using {algo} output...".format(algo = origin_algo))
 	stim_map = vip.metrics.compute_stim_map(residuals_cube)
 
