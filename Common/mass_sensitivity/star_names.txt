@@ -1,0 +1,4 @@
+#Tab Seperatated
+#Name(HIP)	best_Age(Myr) oldest_Age(Myr)	youngest_age(Myr)	Distance(pc)	App. Magnitude
+16095	186	203	166	103	6.311
+16095	186	203	166	103	6.311
