@@ -1,12 +1,18 @@
-# MPhys Script and Resources 
+# MPhys Resources
 
-A collection of scripts and resources in Sasha Hinkley's MPhys group. 
+A collection of codes, instructions and resources for Sasha Hinkley's MPhys group. 
 
 ## Common
 Commonly used scripts in the project:
 	Projectscript
 	Age Code
 	Detection Algorithm
+	
+## Age Code
+
+## RDI
+
+## Sensitivity Plot
 
 ## Web-Database
 Holds all resources related to creating the SQL database for the website.
