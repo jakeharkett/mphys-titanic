@@ -1,6 +1,8 @@
 # MPhys Resources
 
-A collection of codes, instructions and resources for Sasha Hinkley's MPhys group. 
+Mphys-titanic is a repository which manages codes and instructions for "Direct Imaging of Extra-solar Planet and Circumstellar Disks", a master project in the University of Exeter.
+
+For instructions and tutorials, please check the wiki for more details. 
 
 ## Common
 Commonly used scripts in the project:
@@ -24,5 +26,5 @@ Useful Links:
 * [Journal Club](https://docs.google.com/document/d/1rUN64bg_eNm5PRPaTz91oaYbHXKZ7uGiIMtjPI6Ytzs/edit)
 * [VIP Documentation](https://vip.readthedocs.io/en/latest/#tl-dr-setup-guide)
 * [Project Spreadsheet](https://docs.google.com/spreadsheets/d/1XLTNtghPAZx4Jhspb8_6mHPhLNo8COMP2fV5Q2EKrCE/edit?fbclid=IwAR0ZborysGU7QAVsCAPxZK-QcUVkL_-D1IrFah7uJAy-v3e-8jTn8b1muhM#gid=610297215)
-* [Google Drive]
-* [Google CoLab]
+* [Google Drive] Check your email
+* [Google CoLab] 
