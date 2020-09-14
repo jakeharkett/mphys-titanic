@@ -10,8 +10,6 @@ Commonly used scripts in the project:
 * Age Code
 * Detection Algorithm
 	
-## Age Code
-
 ## RDI
 
 ## Sensitivity Plot
