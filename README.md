@@ -12,11 +12,12 @@ Commonly used scripts in the project:
 * Common Proper Motion
 	
 ## RDI
+RDI contains a script to perform RDI. There is an example for each scenrio, point source(s) and extended source. See the wiki page on how to run the code. 
 
 ## Sensitivity Plot
 
 ## Web-Database
-Holds all resources related to creating the SQL database for the website.
+Holds all resources related to creating the SQL database for the website. An residual image has been ... 
 
 ## Website
 Contains the Keck Database website.
