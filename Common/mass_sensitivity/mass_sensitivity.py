@@ -2,10 +2,20 @@
     PROJECT NAME: CONTRAST CURVE
     
     DESCRIPTION: Turns contrast/radius curves to mass/radius
+
+    INSTRUCTION: 
     
-    VERSION	2.2
-    DATE 26/01/18
-    """
+    
+    VERSION	3.0
+    DATE 11/09/2020
+
+    Note: 
+
+    1. Beware of the age of the model
+
+
+    To-do: 
+"""
 
 import glob
 import os
@@ -17,16 +27,18 @@ from scipy.interpolate import griddata
 
 """
     DEFINED VARIABLES
-    """
+"""
 INPUT_NAMES = 'star_names.txt'           #file in which to find names of stars to analysis and age, distance, mag data
-INPUT_BARAFFE_DATA = 'baraffe_final.txt' #data from baraffe
-seperation_column = 0                      #column of input data containg seperation in arcsec
-contrast_column = 1                       #cloumn of input data containing contrast
+INPUT_BARAFFE_DATA = 'baraffe_new.txt'  #data from baraffe
+seperation_column = 3                      #column of input data containg seperation in arcsec
+contrast_column = 0                       #cloumn of input data containing contrast
 ONE_PARSEC = 206268.0                    #AU scale to use on axis of output
 JUP_MASS = 1047.34
+AGE_STAR_UNIT = 1.0e6
+AGE_MODEL_UNIT = 1.0e9
 PLOT_PRECISION = 100               #defines grid side for interpolation
 SAVEFIG = True                    # Change to 'False' to show plots of mass/radius while program is running (does not save fig)
-SHOW_SURFACE = True #Change to 'True' if plot of surface of baraffe data is required. requires mpl_toolkits to be available
+SHOW_SURFACE = False #Change to 'True' if plot of surface of baraffe data is required. requires mpl_toolkits to be available
 
 """
     FUNCTION DEFINITIONS
@@ -46,7 +58,7 @@ def get_contrast_data_filename(name):
 #loads contrast data from file into array and returns orbital seperation and mag
 def load_contrast_data(filename):
     data = np.loadtxt(filename,skiprows=1)
-    
+
     contrast_curve = np.zeros( (len(data[:,0]), 2) )    
     contrast_curve[:,0] = data[:,seperation_column]
     contrast_curve[:,1] = data[:,contrast_column]
@@ -67,7 +79,7 @@ def companion_mag_curve(contrast_data, abs_mag):
 def orbital_sep(angular_sep, distance):
     rad_coef = math.pi /180.0 #convert from degrees to radians
     arc_sec_coef = 1 / 3600.0 #convert from arcseconds to degrees
-    VIP_scaling_coef = 0.01 #factor of 100 in demoninator due to unknown scaling of data files from VIP
+    VIP_scaling_coef = 0.00953 #factor of 100 in demoninator due to unknown scaling of data files from VIP
     angular_sep = angular_sep * rad_coef * arc_sec_coef * VIP_scaling_coef
     return distance * np.tan(angular_sep) * ONE_PARSEC
 
@@ -75,17 +87,25 @@ def orbital_sep(angular_sep, distance):
 def plot_rad_mass(rad_mass,file_dest, name):
     import matplotlib.pyplot as plt
     plt.clf()
+
+    from matplotlib.ticker import MaxNLocator
+    ax = plt.figure().gca()
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
     best, = plt.plot(rad_mass[:,0], rad_mass[:,1],'r', label='Best age estimate')
     oldest, = plt.plot(rad_mass[:,0],rad_mass[:,2],'b', label='Oldest age estimate')
     youngest, = plt.plot(rad_mass[:,0],rad_mass[:,3],'g', label='Youngest age estimate')
 
+    plt.fill_between(rad_mass[:,0], rad_mass[:,3], rad_mass[:,2],color='grey')
+    plt.yscale('linear')
     plt.legend(loc='upper right')
-    plt.ylabel(r'Mass($M_{jup}$)')
-    plt.ylim((0, 30))
+    plt.ylabel(r'Mass ($\mathrm{M_{Jup}}$)')
     plt.xlabel('Orbital separation (AU)')
+    plt.legend(frameon=False)
     #plt.title('Mass - Orbital Separation Sensitivity Plot (%s)' %(name))
+    
     if SAVEFIG:
-        plt.savefig(file_dest,dpi=300)
+        plt.savefig(file_dest,dpi=300,transparent=True)
     else:
         plt.show()
 
@@ -119,7 +139,7 @@ def save_data(name_data, rad_mass):
     fig_file = os.path.join(final_dir, r'rad_mass_%s.png' %(str(int(name_data[i,0]))))
 
     plot_rad_mass(rad_mass, fig_file, str(int(name_data[i,0])))
-    np.savetxt(data_file, rad_mass)
+    np.savetxt(data_file, rad_mass,header="Orbital seperation (AU) Mass_Limit(Best) Mass_Limit(Oldest) Mass_Limit(Youngest)")
 
 def plot_surface_baraffe(ai_grid, mi_grid, lumi):
     import matplotlib.pyplot as plt
@@ -132,59 +152,73 @@ def plot_surface_baraffe(ai_grid, mi_grid, lumi):
 """
     CODE IMPLENTATION
 """
-
-name_data = np.loadtxt(INPUT_NAMES)             #load baraffe data and star data
+#load baraffe data and star data
+name_data = np.loadtxt(INPUT_NAMES)             
 print (name_data)
 baraffe_data = np.loadtxt(INPUT_BARAFFE_DATA)
 
-points = np.zeros((len(baraffe_data),2))        #seperates data points from baraffe into points(age,mass) and magnitude list, lum
+
+#seperates data points from baraffe into points(age,mass) and magnitude list, lum
+points = np.zeros((len(baraffe_data),2))        
 points[:,0] = baraffe_data[:,0]
 points[:,1] = baraffe_data[:,1]
 lum = np.zeros((len(baraffe_data),1))
 lum = baraffe_data[:,2]
 
-ai = np.linspace(np.amin(points[:,0]),np.amax(points[:,0]),num = PLOT_PRECISION, endpoint=True) #Sets up mesh of values to interpolate surface from the scattered data points from baraffe
-mi = np.linspace(np.amin(points[:,1]),np.amax(points[:,1]),num = PLOT_PRECISION, endpoint=True) #the precision of the grid i set by PLOT_PRECISION (ai=age, mi=mass)
+#Sets up mesh of values to interpolate surface from the scattered data points from baraffe
+ai = np.linspace(np.amin(points[:,0]),np.amax(points[:,0]),num = PLOT_PRECISION, endpoint=True) 
+
+#the precision of the grid i set by PLOT_PRECISION (ai=age, mi=mass)
+mi = np.linspace(np.amin(points[:,1]),np.amax(points[:,1]),num = PLOT_PRECISION, endpoint=True) 
 ai_grid, mi_grid = np.meshgrid(ai, mi)
 
-lumi = griddata(points, lum, (ai_grid, mi_grid), method='cubic')  #interpolate from baraffe data points to surface grid lumi
-lumi = check_nan(lumi)                                            #remove any nan values form grid
-func_lum = interpolate.interp2d(ai, mi, lumi,kind='quintic')      #create function from grid
 
-print('Chi Squared test of function verse known data points =')   #print results of chi squared test
+#interpolate from baraffe data points to surface grid lumi
+lumi = griddata(points, lum, (ai_grid, mi_grid), method='cubic')
+#remove any nan values form grid  
+lumi = check_nan(lumi)
+#create function from grid                                          
+func_lum = interpolate.interp2d(ai, mi, lumi,kind='quintic')  
+
+#print results of chi squared test    
+print('Chi Squared test of function verse known data points =')   
 print(chi_squared(points, lum, func_lum))
 
 if SHOW_SURFACE:
     plot_surface_baraffe(ai_grid, mi_grid, lumi)
 
-for i in range(0,len(name_data)):                   #loop over all stars in file outputing data for each star
-    
-    contrast_curve_file = get_contrast_data_filename(str(int(name_data[i,0]))) #load correct contrast data star
+#loop over all stars in file outputing data for each star
+for i in range(0,len(name_data)):                   
+    #load correct contrast data star
+    contrast_curve_file = get_contrast_data_filename(str(int(name_data[i,0]))) 
     contrast_curve = load_contrast_data(contrast_curve_file)
     
-    mag_curve  = np.zeros((len(contrast_curve),2))      #creates array of orbital seperation and companion magnitude
+    #creates array of orbital seperation and companion magnitude
+    mag_curve  = np.zeros((len(contrast_curve),2))      
     mag_curve[:,0] = orbital_sep(contrast_curve[:,0], name_data[i,4])
     mag_curve[:,1] = companion_mag_curve(contrast_curve[:,1], absolute_mag(name_data[i,4], name_data[i,5]))
     
     star_age = np.zeros((3))
-    
-    rad_mass = np.zeros((len(mag_curve),4)) #creates new array to contain mass and orbital seperation
+    #creates new array to contain mass and orbital seperation
+    rad_mass = np.zeros((len(mag_curve),4)) 
     rad_mass[:,0] = mag_curve[:,0]
     
     for j in range(0,3):
-        star_age[j] = np.log10(np.multiply(1.0e6,name_data[i,j+1])) #loads star age
+        # Convert the age of the star to the same unit as the age of the model. 
+        star_age[j] = np.multiply(AGE_STAR_UNIT,name_data[i,j+1])/AGE_MODEL_UNIT 
         massi = np.linspace(np.amin(points[:,1]),np.amax(points[:,1]),num=PLOT_PRECISION, endpoint=True) #creates new linespace of mass to create function of mass in terms of magnitude
         
-        lumi = func_lum(star_age[j], massi)        #takes slice of baraffe data surface defined by star age
+        #takes slice of baraffe data surface defined by star age
+        lumi = func_lum(star_age[j], massi)        
         check = False
+        
         if lumi[0] > lumi[-1]:
             lumi = lumi[::-1]
             massi = massi[::-1]
             check=False
-    
-      
-        func_mass = interpolate.interp1d(np.ravel(lumi), massi, kind='linear', fill_value='extrapolate') #interpolates function mass(magnitude) from baraffe data slice and new mass linespace
-        
+
+        #interpolates function mass(magnitude) from baraffe data slice and new mass linespace
+        func_mass = interpolate.interp1d(np.ravel(lumi), massi, kind='linear', fill_value='extrapolate') 
         mag = mag_curve[:,1]
    
         if np.amin(mag) < np.amin(lumi):
@@ -193,8 +227,8 @@ for i in range(0,len(name_data)):                   #loop over all stars in file
         if np.amax(mag) > np.amax(mag):
             print('Warning data above Baraffe model bounds....Extrapolating')
 
+        #uses function mass(magnitude) to output mass for a give magnitude for each point of the load ontrast curves from VIP
         rad_mass[:,j+1]=np.multiply(JUP_MASS, func_mass(mag))
-        #rad_mass[:,j+1] = np.multiply(JUP_MASS,func_mass(mag)) #uses function mass(magnitude) to output mass for a give magnitude for each point of the load ontrast curves from VIP
     
-    save_data(name_data, rad_mass)#saves all relavent data
+    save_data(name_data, rad_mass)  #save relevant data
 
