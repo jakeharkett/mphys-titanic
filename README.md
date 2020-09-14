@@ -6,9 +6,9 @@ For instructions and tutorials, please check the wiki for more details.
 
 ## Common
 Commonly used scripts in the project:
-	Projectscript
-	Age Code
-	Detection Algorithm
+* Projectscript
+* Age Code
+* Detection Algorithm
 	
 ## Age Code
 
