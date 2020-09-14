@@ -2,7 +2,7 @@
 
 Mphys-titanic is a repository which manages codes and instructions for "Direct Imaging of Extra-solar Planet and Circumstellar Disks", a master project in the University of Exeter.
 
-For instructions and tutorials, please check the wiki for more details. 
+See the wiki for the full documentation. For instructions, check the wiki and xxx_README.md in each folder. 
 
 ## Common
 Commonly used scripts in the project:
