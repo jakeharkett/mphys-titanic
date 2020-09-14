@@ -9,6 +9,7 @@ Commonly used scripts in the project:
 * Projectscript
 * Age Code
 * Detection Algorithm
+* Common Proper Motion
 	
 ## RDI
 
