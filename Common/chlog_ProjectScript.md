@@ -1,8 +1,8 @@
-**************************************NOTES****************************************
+# ProjectScript for processing Keck data
 
-PROJECT SCRIPT 12
+PROJECT SCRIPT 13
 
-Script last updated 21/01/2020
+Script last updated 27/05/2020
 Works for VIP 0.9.11 in Python3 environment (current version on analysis)
 
 For any help, contact:
@@ -10,17 +10,46 @@ For any help, contact:
 	MPhys student with Sasha, 2019/2020
 	jorgefz.fernandez@gmail.com
 
-**************************************INSTRUCTIONS**********************************
+	Alexis Yee Shan Lau
+	alexis.yslau@gmail.com
 
-Place script on the folder where the science images are.
-Run with python.
-Enter the name of the star to run the script, e.g. HIP_99542. 
+For any update, please put them in this document. 
 
+Script designed to build a data cube from fits files with the aid of the VIP module
+in python, reduce the images using the PCA and LLSG method of imaging reduction. 
+Script also then calculates the flux from the exposure times of the fits files and 
+then generates contrast curves based on the data cube produced and this value of flux.
 
-Ignore this for the moment:
-	--Please upload contrcurve.py, cosmetics.py, fakecomp.py and shapes.py when running this script (avaliable in DangerZone)
+Note that we use the same psf.fits file for all epoches, which means to yield a meaning contrast, calibration is needed (work in progress by Alexis). 
 
+STRUCTURE
 
+	1. Import libraries 
+	
+	2. Global variables
+	
+	3. Functions (preproceesing, ultilis)
+
+	4. Main Functions
+
+	5. Image Processing
+
+To-do:
+
+	1. Alexis: Incooporate with detection modules from ANDROMEDEA? 
+
+************************************INSTRUCTIONS***********************************
+
+Place the scripts (ProjectScript13.py, ProjectScript_preprocesing.py, ProjectScript_ultils.py)
+in the DangerZone or the top directory where you store the data
+
+(wdir on analysis: /data/shinkley/Keck_data/completed_stars/DangerZone)
+
+To run this script in terminal (linux/Mac), navagate to the top directory which contains the data, 
+
+	python ProjectScriptxx.py
+
+Input the name of the star as stated in the output from the terminal and follow the guidance.
 
 **************************************UPDATES**************************************
 
@@ -50,12 +79,14 @@ Ignore this for the moment:
 	5. Made Image removal function more efficient and removed the necessity to know how many
 	   images were going to be removed before entering numbers.
 	6. Background flux now takes grids within 0.5 stdev of mean
+
 08/06/17
 	1. Removed Planet injection loop due to bug
 	2. The .png files of each reduction were outputing blank files. No way was found to 
 	   fix this therefore the code was removed. still saved as .fits but no .png.
 	   This appears to be beacuse it is saving wrong figure but this is due to a VIP
 	   hence no solution was found.
+
 14/06/17
 	1. Fixed the ininate loop when asking to re enter coodinates
 	2. Fixed the re entered coordinates not being correctly over writtten
@@ -149,21 +180,9 @@ Contact: jorgefz.fernandez@gmail.com
 	Reworked Recentering function
 	Added more recentering algorithms
 
-Script designed to build a data cube from fits files with the aid of the VIP module
-in python, reduce the images using the PCA and LLSG method of imaging reduction. 
-Script also then calculates the flux from the exposure times of the fits files and 
-then generates contrast curves based on the data cube produced and this value of flux.
-
-
-STUCTURE
-
-	1. Packages
-	
-	2. Global variables
-	
-	3. Functions
-
-	4. Main Functions
-
-	5. Image Processing
-
+23/05/2020
+	Changed name to ProjectScript13
+	Seperated functions into Project_preprocessing.py and ProjectScript_ultils.py
+	Created README_ProjectScript.md
+	Removed redundant syntaxes
+	Added comments for each function with input parameters
