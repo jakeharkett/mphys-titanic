@@ -1,13 +1,6 @@
-
-
-
-
-
-
-
 """
 ===============================================
-	Colour Magnitude Diagram Age Analysis
+	Colour Magnitude Diagram Age Analysis (Python)
 ===============================================
 
 Original Author:
