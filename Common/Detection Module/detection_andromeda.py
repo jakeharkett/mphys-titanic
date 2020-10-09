@@ -1308,8 +1308,8 @@ def main():
 		print("\n")
 
 		#Check that SNR maps exist
-		snrmap_path = path + "andr_snrmap_" + starname + ".fits"
-		snrnorm_path = path + "andr_snrnorm_" + starname + ".fits"
+		snrmap_path = path + "ANDR_snrmap_" + starname + ".fits"
+		snrnorm_path = path + "ANDR_snrnorm_" + starname + ".fits"
 
 		if(not os.path.isdir(path)):
 			print(" Error: path '%s' does not exist" % path)
@@ -1331,10 +1331,10 @@ def main():
 	stddev_flux_norm = None
 
 	if (option == 1):
-		snr_stdev = path + "andr_snrmap_stddev_" + starname + ".fits"
-		flux_map_path = path + "andr_contrast_" + starname + ".fits"
-		stddev_flux_map_path = path + "andr_contrast_stddev_" + starname + ".fits"
-		stddev_flux_norm_path = path + "andr_contrastnorm_stddev_" + starname + ".fits"
+		snr_stdev = path + "ANDR_snrmap_stddev_" + starname + ".fits"
+		flux_map_path = path + "ANDR_contrast_" + starname + ".fits"
+		stddev_flux_map_path = path + "ANDR_contrast_stddev_" + starname + ".fits"
+		stddev_flux_norm_path = path + "ANDR_contrastnorm_stddev_" + starname + ".fits"
 
 		if (os.path.isfile(snrmap_path)):
 			snr_map = np.flip(vip.fits.fits.open_fits(snrmap_path), axis=0)
