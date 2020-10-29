@@ -570,6 +570,7 @@ class SignalClass:
 # =================================================================
 
 
+
 # ============= IDL functions ================= 
 class idl:
 
@@ -1059,7 +1060,100 @@ def save_detmap(DetData):
 	plt.show()
 
 
-"""
+
+	"""
+	MASK IWA OWA
+
+	The mask returned by Polaire is a numpy array of the same shape as detection map,
+	but it contains zeros and ones.
+	Polaire takes an image size 's' and a width 'r',
+	and returns an image and a circular mask within the image, with diameter 'r',
+	such that it's all ones within the circle, and zeroes outside of it.
+
+	Approximate example:
+
+	0000000000000000
+	0000001111000000
+	0000111111110000
+	0001111111111000
+	0000111111110000
+	0000001111000000
+	0000000000000000
+
+	
+	Doing (1 - mask) will invert it: zeroes within the circle and ones outside.
+	
+	1111111111111111
+	1111110000111111
+	1111000000001111
+	1110000000000111
+	1111000000001111
+	1111110000111111
+	1111111111111111
+
+	
+	Set-up the iwa and owa masks so you keep the data between the two circles.
+
+	For example, you want to ignore the data within the iwa circle but keep the rest,
+	then use a mask which has zeroes in the circle, and ones outside.
+	For the owa, you want to keep the data inside, but delete whatever is outside
+	the limits: use a mask which has ones within the circle and zeroes outside.
+
+	Multiply both masks and you have your final result:
+
+	mask_owa * (1 - mask_iwa)
+
+	000000001111111110000000
+	000001111111111111100000
+	000011111111111111111000
+	000111111110001111111100
+	001111111000000011111110
+	011111110000000001111111
+	001111111000000011111110
+	000111111110001111111100
+	000011111111111111111000
+	000000111111111111100000
+	000000001111111110000000
+
+	Now, simply multiply the detection map by this mask.
+
+	"""
+def mask_iwa_owa(detmap, DetData):
+	# Set values within iwa and outside owa to 0
+	rt_iwa = math.ceil(DetData.Var.res) * DetData.Var.iwa
+	rt_owa = math.ceil(DetData.Var.res) * DetData.Var.owa / 2
+
+	img_sz = detmap.shape[0]
+	center_ind = [detmap.shape[0]/2 - 1, detmap.shape[1]/2 - 1]
+
+	# Get masks to remove data within iwa and outside owa
+	polaire_out_iwa = idl.polaire2(rt_iwa, width=img_sz, 
+									center_x=center_ind[0],
+									center_y=center_ind[1],
+									verbose = False)
+	mask_iwa = polaire_out_iwa[2]
+
+	polaire_out_owa = idl.polaire2(rt_owa, width=img_sz, 
+									center_x=center_ind[0],
+									center_y=center_ind[1],
+									verbose = False)
+	mask_owa = polaire_out_owa[2]
+
+	final_mask = (1 - mask_iwa) * mask_owa
+	detmap *= final_mask
+
+	if(DetData.Var.verbose):
+		plt.imshow( final_mask )
+		plt.title(f"Mask \n iwa = {DetData.Var.iwa:.2f} λ/D ( {int(rt_iwa)} pix )\n"
+					+ f"owa = {DetData.Var.owa:.2f} λ/D ( {int(rt_owa)} pix ) ")
+		plt.show()
+
+	return detmap
+
+
+
+
+	"""
 	Andromeda Detection Module
 	--------------------------
 
@@ -1181,6 +1275,9 @@ def detection_andromeda(
 	# Make copy of snorm to edit and crop looking for signals
 	detectionMap = np.copy(DetData.Map.snorm)
 
+	# Remove data outside owa and iwa limits
+	detectionMap = mask_iwa_owa(detectionMap, DetData)
+
 	# Check that at least a value is above threshold in snorm
 	if( np.amax(detectionMap) < DetData.Var.limit ):
 		print(" Warning: No signals found above threshold! Try a lower threshold.")
@@ -1188,7 +1285,6 @@ def detection_andromeda(
 
 	# LOOP FOR SIGNALS (or before reaching PMAX):
 	for r in range(0, max_signals):
-		
 		# Check if all signals above threshold have already been found and cropped out
 		if( np.amax(detectionMap) < DetData.Var.limit ):
 			if(verbose):
@@ -1355,7 +1451,7 @@ def main():
 			snr_map = np.copy(snr_norm)
 
 	elif (option == 2):
-		snr_map = np.flip(vip.fits.fits.open_fits(starpath), axis=0)
+		snr_map = np.flip(vip.fits.fits.open_fits(starpath,ignore_missing_end=True), axis=0)
 		snr_norm = None
 		flux_map = None
 		stddev_flux_map = None
@@ -1404,7 +1500,6 @@ def main():
 			neigh = 0, owa = 0, iwa = 0,
 			verbose = verbose, telescope_type = obs_type, save_plots = plot3d,
 			max_signals = maxdet, path = path)
-
 
 if __name__ == '__main__':
 	main()
