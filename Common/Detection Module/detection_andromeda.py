@@ -16,7 +16,6 @@ from mpl_toolkits.mplot3d.axes3d import get_test_data
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 from matplotlib import cm
 
-
 """
 
 	ANDROMEDA DETECTION ALGORITHM
@@ -84,10 +83,10 @@ from matplotlib import cm
 		                        Default = False
 		  -p, --plot3d          Generates 3D plots of signal and gaussian fits.
 		                        Default = False
-		  -g GAUSS, --gauss GAUSS
+		  -g [str], --gauss [str]
 		                        Specifies set of gaussian constraints to use on
 		                        signals.Names: naco, nirc2, stim, other
-		  -m MAXDET, --maxdet MAXDET
+		  -m [int], --maxdet [int]
 		                        Max limit of detections in the map. Default = 100
 
 	Examples:
@@ -457,6 +456,12 @@ class SignalClass:
 	# Sets signal positional flag
 	# Only to be called when detection ends
 	def set_pos_flag(self, DetData, ind):
+		# Case where no flux map is provided.
+		# It will make all flux fits good
+		# Hence when firm detections are made on snr map, it's shown as white circles
+		# instead of orange.
+		if(not DetData.Map.noflux):
+			self.f_goodfit = True
 		# Good SNR / Bad FLux fits, or vice-versa
 		if(self.goodfit and not self.f_goodfit) or \
 			(not self.goodfit and self.f_goodfit):
@@ -1121,7 +1126,7 @@ def save_detmap(DetData):
 def mask_iwa_owa(detmap, DetData):
 	# Set values within iwa and outside owa to 0
 	rt_iwa = math.ceil(DetData.Var.res) * DetData.Var.iwa
-	rt_owa = math.ceil(DetData.Var.res) * DetData.Var.owa / 2
+	rt_owa = math.ceil(DetData.Var.res) * DetData.Var.owa
 
 	img_sz = detmap.shape[0]
 	center_ind = [detmap.shape[0]/2 - 1, detmap.shape[1]/2 - 1]
@@ -1329,6 +1334,12 @@ def parse_args():
 	parser.add_argument("-m","--maxdet", type=int,
 		help="Max limit of detections in the map. Default = 10")
 
+	parser.add_argument("-i","--iwa", type=float,
+		help="Inner Working Angle. Default = 1 lambda / D")
+
+	parser.add_argument("-o","--owa", type=float,
+		help="Outer Working Angle. Default = (map centre / element of resolution) lambda / D")
+
 
 	args = parser.parse_args()
 
@@ -1347,7 +1358,13 @@ def parse_args():
 	if( args.maxdet == None):
 		args.maxdet = 10
 
-	return args.verbose, args.plot3d, args.gauss, args.maxdet
+	if( not args.iwa):
+		args.iwa = 0
+
+	if( not args.owa):
+		args.owa = 0
+
+	return args.verbose, args.plot3d, args.gauss, args.maxdet, args.iwa, args.owa
 
 
 
@@ -1357,7 +1374,7 @@ def main():
 	print("\n === Andromeda Detection Algorithm ===")
 
 	# COMMAND LINE ARGUMENTS
-	verbose, plot3d, obs_type, maxdet = parse_args()
+	verbose, plot3d, obs_type, maxdet, input_iwa, input_owa = parse_args()
 
 	# Ask for image type to analyse
 	option = 0
@@ -1497,7 +1514,7 @@ def main():
 			fmap = flux_map, fdev = stddev_flux_map, fndev = stddev_flux_norm,
 			limit = threshold, subw_sz = 0,
 			pxscale = pixscale, oversamp = oversampling,
-			neigh = 0, owa = 0, iwa = 0,
+			neigh = 0, owa = input_owa, iwa = input_iwa,
 			verbose = verbose, telescope_type = obs_type, save_plots = plot3d,
 			max_signals = maxdet, path = path)
 
