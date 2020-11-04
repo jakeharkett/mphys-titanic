@@ -1,3 +1,7 @@
+
+
+
+
 import matplotlib as mpl
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -88,6 +92,9 @@ from matplotlib import cm
 		                        signals.Names: naco, nirc2, stim, other
 		  -m [int], --maxdet [int]
 		                        Max limit of detections in the map. Default = 100
+
+
+
 
 	Examples:
 
@@ -249,6 +256,7 @@ class VarsClass:
 Stores 'good' Gaussian fit constraints
 """
 class GaussParamsClass:
+
 	def __init__(self, res, subw_sz, telescope_type):
 		self.sz = subw_sz
 		self.lsize = [0,0]	# [Max,Min] range for larger FWHM
@@ -312,6 +320,7 @@ class GaussParamsClass:
 		else:
 			print(" Error: unknown telescope type: '%s'" % telescope_type)
 			exit(-1)
+
 
 	def check_fit(self, fwhm, center, subw_sz):
 		# Find larger/smaller between FWHM_x and FWHM_y
@@ -900,6 +909,7 @@ def process_signal(DetData, detectionMap, loop_counter):
 	newSignal.fit_gaussian_flux(DetData)
 	DetData.SignalArray.append(newSignal)
 
+
 	# Save 3D plots
 	if( DetData.Var.plot3d ):
 		plot_3d_window_gaussian(sz = DetData.Var.subw_sz, 
@@ -1273,8 +1283,11 @@ def detection_andromeda(
 					owa=owa, iwa=iwa, subw_sz=subw_sz,
 					map_sz=smap.shape[0], neigh=neigh,
 					verbose = verbose, plot3d = save_plots, path=path)
+
 	GaussParams = GaussParamsClass(Vars.res, Vars.subw_sz, telescope_type)
+
 	DetData = DetDataClass(Maps, Vars, GaussParams)
+
 
 	# TO-DO
 	# Make copy of snorm to edit and crop looking for signals
@@ -1311,6 +1324,8 @@ def detection_andromeda(
 	save_csv(DetData)
 	# Build detections map and plot
 	save_detmap(DetData)
+
+
 
 
 # =================================================================
@@ -1517,6 +1532,7 @@ def main():
 			neigh = 0, owa = input_owa, iwa = input_iwa,
 			verbose = verbose, telescope_type = obs_type, save_plots = plot3d,
 			max_signals = maxdet, path = path)
+
 
 if __name__ == '__main__':
 	main()
