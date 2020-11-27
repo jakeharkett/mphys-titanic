@@ -1,5 +1,6 @@
 """
 Script adapted from DMC_DImode.py provided by Mariangela Bonavita at https://github.com/mbonav/Exo_DMC
+Follow instructions from Exo_DMC github page to install the program, as this is just wrapper code
 
 Input files required:
     -rad_mass_data_[star name].txt output from mass_sensitivity.py
@@ -10,7 +11,7 @@ Currently only works for one star at a time but will be updated to run multiple
 from DMC import *
 import numpy as np
 
-ID= 99542 #input star ID number here    #np.loadtxt('starnames.txt')
+ID= '99542' #input star ID number here    #np.loadtxt('starnames.txt')
 dist= 40.7000407 #input distance to star here(in pc)  #np.loadtxt('distance.txt')
 # generate the syntetic planet population with the standard setup
 # Inputs: 
