@@ -224,11 +224,12 @@ class VarsClass:
 		if(self.verbose):
 			print(" Oversampling set to",self.oversamp, "lambda/D")
 
-		if( map_sz <= 0):
-			print(" Error: map size must be greater than zero")
+		if( map_sz <= 2):
+			print(f" Error: map size is too small ({map_sz} pixels)")
 			exit(-1)
 
 		if( owa <= 0 ):
+			print("		MAP SIZE = ", self.map_sz)
 			self.owa = (self.map_sz/2. - 1) / (2.*self.oversamp)
 			if(self.verbose):
 				print(" OWA set to", self.owa, "lambda/D")
@@ -1134,6 +1135,7 @@ def save_detmap(DetData):
 
 	"""
 def mask_iwa_owa(detmap, DetData):
+	print(f"res={DetData.Var.res}, iwa={DetData.Var.iwa}, owa={DetData.Var.owa}")
 	# Set values within iwa and outside owa to 0
 	rt_iwa = math.ceil(DetData.Var.res) * DetData.Var.iwa
 	rt_owa = math.ceil(DetData.Var.res) * DetData.Var.owa
@@ -1281,7 +1283,7 @@ def detection_andromeda(
 					verbose=verbose)
 	Vars = VarsClass(limit=limit, pxscale=pxscale, oversamp=oversamp,
 					owa=owa, iwa=iwa, subw_sz=subw_sz,
-					map_sz=smap.shape[0], neigh=neigh,
+					map_sz=Maps.smap.shape[0], neigh=neigh,
 					verbose = verbose, plot3d = save_plots, path=path)
 
 	GaussParams = GaussParamsClass(Vars.res, Vars.subw_sz, telescope_type)
@@ -1483,7 +1485,7 @@ def main():
 			snr_map = np.copy(snr_norm)
 
 	elif (option == 2):
-		snr_map = np.flip(vip.fits.fits.open_fits(starpath,ignore_missing_end=True), axis=0)
+		snr_map_input = np.flip(vip.fits.fits.open_fits(starpath,ignore_missing_end=True), axis=0)
 		snr_norm = None
 		flux_map = None
 		stddev_flux_map = None
@@ -1494,6 +1496,12 @@ def main():
 			path = "./"
 		else:
 			path = starpath[0:slash+1]
+		# Account for anomalous FITS images where data is not directly read as a 2D
+		# array of pixels (height, width) but as an array of images (n, height, width)
+		if(len(snr_map_input.shape) == 3):
+			snr_map = snr_map_input[0]
+		else:
+			snr_map = snr_map_input
 
 	# OVERSAMPLING CALCULATION
 	# Pixscale for K-band
