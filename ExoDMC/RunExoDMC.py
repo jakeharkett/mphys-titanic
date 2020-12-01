@@ -5,7 +5,8 @@ Follow instructions from Exo_DMC github page to install the program, as this is 
 Input files required:
     -rad_mass_data_[star name].txt output from mass_sensitivity.py
     
-Currently only works for one star at a time but will be updated to run multiple
+Link to google doc with detailed instructions: 
+https://docs.google.com/document/d/1zMBQuR5Yy3-d0ylZYkBX3u4LoGuKNifVxkbYrbmQwgE/edit?usp=sharing
 """
 
 from DMC import *
