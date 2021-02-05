@@ -55,7 +55,7 @@ map.set_grid(x_min=1, x_max=1000, y_min=1, y_max=100, logx=True, logy=True)
 #	- e_sigma: float, optional, sigma of the gaussian eccentricity distribution, default is 0.3
 
 
-data=np.loadtxt('rad_mass_data_{name}_RDI.txt'.format(name=ID))
+data=np.loadtxt('rad_mass_data_{name}.txt'.format(name=ID))
 # define the detection limit 
 xlim=data[:,0] # separation (arcsec)
 ylim=data[:,2] # mass (mjup ) 
